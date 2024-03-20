@@ -146,6 +146,130 @@ def give_Fext(Fext_phys, phi):
 '''
 
 '''
+Description : gives a ramp-force vector
+
+Inputs :    t       : (Nt)  time vector      
+            ts      : ()    ramp's starting time
+            te      : ()    ramp's ending time
+            Fs      : ()    ramp's force at starting time
+            Fe      : ()    ramp's force at ending time
+
+Outputs :   F_ramp  : (Nt)  ramp-force vector
+'''
+def UK_ramp_force(t, ts, te, Fs, Fe):
+    Nt                  = t.shape
+    F_ramp              = np.zeros(Nt)
+    idx_ramp            = np.logical_and(t>ts, t<te)
+    F_ramp[idx_ramp]    = Fs + (Fe-Fs)*(t[idx_ramp] - ts)/(te - ts)
+    return F_ramp
+    
+
+'''
+Description : gives a modal external force matrix
+
+Inputs :    Nt      : ()        time array's length
+            Nx      : ()        position array's length
+            F_idx   : ()        index in the position array where the force is 
+                                applied 
+            F_fun   : ()        force function
+            phi     : ()        subsystem's modeshape
+            params  : ()        force function's parameters
+
+Outputs :   Fext    : (Nt,Nx)  modal external force vector
+'''
+def UK_apply_force(Nt, Nx, F_idx=0, F_fun=None, phi=None, params=()):
+    Fext = sp.sparse.csr_array((Nt,Nx))
+    if F_fun:
+        Fext[:, F_idx]  = F_fun(*params)
+        Fext            = give_Fext(Fext, phi)
+    return Fext
+
+
+'''
+Description :   gives the UK modal parameters m, c and k and modeshapes phi_s
+                for a damped elastic string 
+
+Inputs :    x       : []        position vector    
+            params  :           dictionnary containing the following 
+                                parameters :
+                Nn_s    : [-]       number of string modes taken into account            
+                T       : [N]       string's tension force 
+                L       : [m]       string's length
+                rho_l   : [kg/m3]   string's longitudinal density
+                B       : [Nm2]     string's bending stiffness
+                etaF    : []        string's internal friction
+                etaA    : []        string's air viscous damping
+                etaB    : []        string's bending damping
+
+Outputs :   m_s     : (Nn_s)        string's modal mass vector
+            k_s     : (Nn_s)        string's modal rigidity vector
+            c_s     : (Nn_s)        string's modal damping vector
+            phi_s   : (Nx, Nn_s)    string's modeshapes 
+'''
+def UK_elastic_string(x, params):
+    Nn_s    = params['Nn_s']
+    T       = params['T']
+    L       = params['L']
+    rho_l   = params['rho_l']
+    B       = params['B']
+    etaF    = params['etaF']
+    etaA    = params['etaA']
+    etaB    = params['etaB']
+    n       = np.arange(Nn_s) + 1
+    ct      = np.sqrt(T/rho_l)
+    
+    Nx = x.size
+    
+    p = (2*n-1)*np.pi/(2*L)
+    f_s = ct/(2*np.pi)*p*(1+B/(2*T)*p**2)    
+    w_s = 2*np.pi*f_s
+    
+    phi_s = np.zeros((Nx, Nn_s))
+    for i in range(n.size):
+        phi_s[:,i] = np.sin(p[i]*x)
+    
+    m_s = rho_l*L/2*np.ones(Nn_s)
+    
+    zeta_s = 1/2*(T*(etaF+etaA/w_s)+etaB*B*p**2)/(T+B*p**2) 
+    
+    k_s = m_s*(w_s)**2
+    
+    c_s = 2*m_s*w_s*zeta_s
+    
+    return m_s, k_s, c_s, phi_s
+
+
+'''
+Description :   gives the UK modal parameters m, c and k and modeshapes phi_s
+                for a modal board
+
+Inputs :    params  :           dictionnary containing the following 
+                                parameters :
+                f_b     : (Nn_b) boards' modal frequencies
+                zeta_b  : (Nn_b) boards' modal losses
+                m_b     : (Nn_b) boards' modal masses
+
+Outputs :   m_b     : (Nn_s)        board's modal mass vector
+            k_b     : (Nn_s)        board's modal rigidity vector
+            c_b     : (Nn_s)        board's modal damping vector
+            phi_b   : (Nx, Nn_s)    board's modeshapes 
+'''
+def UK_board_modal(params):
+    f_b     = params['f_b']
+    zeta_b  = params['zeta_b']
+    m_b     = params['m_b']
+    
+    Nn_b    = f_b.size 
+    w_b     = 2*np.pi*f_b
+    k_b     = m_b*(w_b)**2
+    c_b     = 2*m_b*w_b*zeta_b
+    phi_b   = np.ones((1,Nn_b))  # body modes normalized at the bridge location
+    
+    return m_b, k_b, c_b, phi_b
+
+
+
+'''
 Description :   gives the UK modal model of a one-string guitare. This model 
                 is from J.ANTUNES and V.DEBUT, 2017.
 
@@ -161,7 +285,7 @@ Outputs : M           : (Nn,Nn)       modal mass matrix
           Vc          : (Nn)          modal V matrix (such that 
                                       Fc = Wc @ qudd + Vc)
           phi         : (Nx,Nn)       string's modeshapes  
-          phi_c       : (Nm,Nn)       system's modeshapes at constraints' 
+          phi_c       : (Nm,Nn)       system's modeshapes at constraints 
           Fext        : (Nt,Nn)       external modal force matrix
           q0          : (Nn)          intial modal response 
           qd0         : (Nn)          intial modal response's velocity
@@ -182,70 +306,49 @@ def ANTUNES_2017(coupled=True):
     
     # String model
     
-    L       = 0.65 
-    xE      = 0.9*L
-    xF      = 0.33*L
-    idxF    = 0
-    idxE    = 1
-    x       = np.array([xF, xE, L])
-    n       = np.arange(200)+1
-    T       = 73.9
-    rho_l   = 3.61e-3
-    ct      = np.sqrt(T/rho_l)
-    B       = 4e-5
-    etaF    = 7e-5
-    etaA    = 0.9
-    etaB    = 2.5e-2
+    L = 0.65
     
-    Nn_s    = n.size
+    x       = np.array([0.33*L, 0.9*L, L])  
     Nx      = x.size
+    params  = {}
+    params['Nn_s']  = 200
+    params['T']     = 73.9
+    params['L']     = L 
+    params['rho_l'] = 3.61e-3
+    params['B']     = 4e-5
+    params['etaF']  = 7e-5
+    params['etaA']  = 0.9
+    params['etaB']  = 2.5e-2
     
-    p = (2*n-1)*np.pi/(2*L)
-    f_s = ct/(2*np.pi)*p*(1+B/(2*T)*p**2)    
-    w_s = 2*np.pi*f_s
+    m_s, k_s, c_s, phi_s = UK_elastic_string(x, params)
     
-    phi_s = np.zeros((Nx, Nn_s))
-    for i in range(n.size):
-        phi_s[:,i] = np.sin(p[i]*x)
+    F_idx   = 1  
+    ts      = 0.
+    te      = 1e-2
+    Fs      = 0.
+    Fe      = 5.
+    params  = (t, ts, te, Fs, Fe)
     
-    # Fext_phys_s             =  np.zeros((Nt, Nx))  # CHANGE TO SCIPY ARRAY !!!!!!!!!!!!!!!!!!!
-    Fext_phys_s             = sp.sparse.csr_array((Nt,Nx))
-    Fext_phys_s[t<tE,idxE]  =  5*t[t<tE]/t[t<tE][-1]
-    Fext_s                  = give_Fext(Fext_phys_s, phi_s) 
-    
-    
-    m_s = rho_l*L/2*np.ones(Nn_s)
-    
-    zeta_s = 1/2*(T*(etaF+etaA/w_s)+etaB*B*p**2)/(T+B*p**2) 
-    
-    k_s = m_s*(w_s)**2
-    
-    c_s = 2*m_s*w_s*zeta_s
-    
+    Fext_s = UK_apply_force(Nt, Nx, F_idx, UK_ramp_force, phi_s, params)
     
     # Board model
     
-    Nn_b    = 16 
+    params = {}
     
-    phi_b   = np.ones((1,Nn_b))  # body modes normalized at the bridge location
+    params['f_b']     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 
+                                  314.7, 344.5, 399.0, 429.6, 482.9, 504.2, 
+                                  553.9, 580.3, 645.7, 723.5])
     
-    f_b     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 314.7, 
-                        344.5, 399.0, 429.6, 482.9, 504.2, 553.9, 580.3, 
-                        645.7, 723.5]) 
-    w_b     = 2*np.pi*f_b
+    params['zeta_b']  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 
+                                  0.9, 0.7, 0.7, 0.6, 1.4, 1.0, 1.3])
     
-    zeta_b  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 0.9, 
-                        0.7, 0.7, 0.6, 1.4, 1.0, 1.3])
+    params['m_b']     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 
+                                  8.80, 0.9, 0.41, 0.38, 1.07, 2.33, 1.36, 
+                                  2.02, 0.45])
     
-    m_b     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 8.80, 0.9, 
-                        0.41, 0.38, 1.07, 2.33, 1.36, 2.02, 0.45])
+    m_b, k_b, c_b, phi_b = UK_board_modal(params)
     
-    k_b = m_b*(w_b)**2
-    
-    c_b = 2*m_b*w_b*zeta_b
-    
-    #Fext_b  = np.zeros((Nt,Nn_b)) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    Fext_b   = sp.sparse.csr_array((Nt,Nn_b))
+    Fext_b  = UK_apply_force(Nt, 1)
     
     # Overall model
     
