@@ -106,7 +106,7 @@ Outputs : W           : ([Na],Nn,Nn)  modal W matrix (such that
           Vc          : ([Na],Nn)     modal V matrix (such that 
                                       Fc = Wc @ qudd + Vc)
 '''
-def give_W_V(A, M, b):
+def UK_give_W_V(A, M, b):
     # Case where Bp is computed off-line
     if len(A.shape)>2:
         Na,Nm,Nn = A.shape
@@ -298,7 +298,7 @@ def UK_constraint_fixed(idx_sys, idx_x):
 
 '''
 Description :   gives the constraint dictionnary for a contact constraint on 
-                the given system at a given position.
+                the given systems at given positions.
 
 Inputs :    idx_sys : indices of the two constrained systems
             idx_x   : indices of the two positions 
@@ -310,6 +310,20 @@ def UK_constraint_contact(idx_sys, idx_x):
                   'idx_sys' : idx_sys,
                   'idx_x' : idx_x} 
     return constraint
+
+
+'''
+Description :   gives the initial dictionnary for a rest initial state on 
+                the given system.
+
+Inputs :    idx_sys : indices of the resting system
+                        
+Outputs :   constraint : corresponding initial dictionnary 
+'''    
+def UK_initial_rest(idx_sys):
+    initial = {'type' : 'rest',
+                  'idx_sys' : idx_sys} 
+    return initial
 
 
 '''
@@ -365,7 +379,47 @@ def UK_give_A_b(phi_tuple, constraints=()):
                 phi_c[i,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = \
                     phi_tuple[idx_sys][idx_x]
     return A, b, phi_c
-                
+
+
+'''
+Description :   gives the initial state q0, qd0, qdd0 and the initial 
+                constraint force for the given initial conditions.
+
+Inputs :    phi_tuple   : (Ns)  tuple containing all the modeshapes (Nx_i, 
+                                                                     Nn_i)
+            initials    :       tuple of dictionnaries containing the 
+                                    initial conditions :
+                type : string containing the type of initial conditions
+                    if type=='rest':
+                        idx_sys : int containing the system's index
+                        
+Outputs :   q0      : (Nn) initial position vector
+            qd0     : (Nn) initial velocity vector
+            qdd0    : (Nn) initial acceleration vector
+            Fc0     : (Nn) initial constraint force vector
+'''
+def UK_give_initial_state(phi_tuple, initials=()):
+    Nn_tuple = (0,)
+    for phi in phi_tuple:
+        Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
+    Nn          = Nn_tuple[-1]
+    Ni          = len(initials)
+    
+    q0      = np.zeros(Nn)
+    qd0     = np.zeros(Nn)
+    qdd0    = np.zeros(Nn)
+    Fc0     = np.zeros(Nn)
+    
+    for i,init in enumerate(initials):
+        if init['type'] == 'rest':
+            idx_sys     = init['idx_sys']
+            zero_vect   = np.zeros(Nn_tuple[idx_sys+1] - Nn_tuple[idx_sys])
+            q0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]   = zero_vect
+            qd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
+            qdd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = zero_vect
+            Fc0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
+    
+    return q0, qd0, qdd0, Fc0
 
 '''
 Description :   gives the modal matrices M, K, C, modeshapes' matrix PHI and
@@ -449,7 +503,7 @@ def ANTUNES_2017(coupled=True):
     
     Nt = t.size
     
-    # String model
+    # STRING MODEL -----------------------------------------------------
     
     L = 0.65
     
@@ -477,7 +531,7 @@ def ANTUNES_2017(coupled=True):
     
     Fext_s = UK_apply_force(Nt, Nx, phi_s, F_idx, UK_ramp_force, params)
     
-    # Board model
+    # BOARD MODEL -------------------------------------------------------
     
     params = {}
     
@@ -496,7 +550,7 @@ def ANTUNES_2017(coupled=True):
     
     Fext_b  = UK_apply_force(Nt, 1, phi_b)
     
-    # Overall model
+    # OVERALL MODEL -----------------------------------------------------
     
     m_tuple     = (m_s, m_b) 
     k_tuple     = (k_s, k_b)
@@ -504,10 +558,10 @@ def ANTUNES_2017(coupled=True):
     Fext_tuple  = (Fext_s, Fext_b)
     phi_tuple   = (phi_s, phi_b)
     
-    M, K, C, phi = UK_give_overall_model(m_tuple, k_tuple, c_tuple, 
+    M, K, C, phi, Fext = UK_give_overall_model(m_tuple, k_tuple, c_tuple, 
                                          Fext_tuple, phi_tuple)
     
-    # Constraints
+    # CONSTRAINTS -------------------------------------------------------
     
     if coupled:
         constraints = (UK_constraint_fixed(0, 0), 
@@ -516,18 +570,17 @@ def ANTUNES_2017(coupled=True):
         constraints = (UK_constraint_fixed(0, 0), 
                        UK_constraint_fixed(0, 2))
     
-    A, b, phi_c = UK_give_A_b(phi_tuple, constraints)  # BUGGED (CHECK A VALUE)
+    A, b, phi_c = UK_give_A_b(phi_tuple, constraints)
         
-    # W, V, Wc, Vc matrices
+    # W, V, Wc, Vc MATRICES ---------------------------------------------
     
-    W, V, Wc, Vc = give_W_V(A, M, b)
+    W, V, Wc, Vc = UK_give_W_V(A, M, b)
     
-    # Initial conditions
+    # INITIAL CONDITIONS ------------------------------------------------
     
-    q0      = np.zeros(Nn)
-    qd0     = np.zeros(Nn)
-    qdd0    = np.zeros(Nn) 
-    Fc0     = np.zeros(Nn)
+    initial = (UK_initial_rest(0), UK_initial_rest(1))
+    
+    q0, qd0, qdd0, Fc0 = UK_give_initial_state(phi_tuple, initial)
     
     return M, K, C, W, V, Wc, Vc, phi, phi_c, Fext, q0, qd0 ,qdd0, Fc0, h
     
