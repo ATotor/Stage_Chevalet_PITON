@@ -101,31 +101,43 @@ Outputs : W           : ([Na],Nn,Nn)  modal W matrix (such that
                                       qdd = W @ qudd + V)
           V           : ([Na],Nn)     modal V matrix (such that 
                                       qdd = W @ qudd + V)
+          Wc          : ([Na],Nn,Nn)  modal Wc matrix (such that 
+                                      Fc = Wc @ qudd + Vc)
+          Vc          : ([Na],Nn)     modal V matrix (such that 
+                                      Fc = Wc @ qudd + Vc)
 '''
-def give_W_V(A, M, b):
+def UK_give_W_V(A, M, b):
     # Case where Bp is computed off-line
     if len(A.shape)>2:
         Na,Nm,Nn = A.shape
         I           = np.eye(Nn)
+        M_sq        = M.power(1/2)
         M_sq_inv    = M.power(-1/2)
         W           = np.zeros((Na, Nn, Nn))
-        V           = np.zeros((Nn,1))
+        V           = np.zeros((Na, Nn, 1))
+        Wc          = np.zeros((Na, Nn, Nn))
+        Vc          = np.zeros((Na, Nn, 1))
         for i in range(Na):
             B       = A[i] @ M_sq_inv
             Bp      = give_MP_inv(B)
             MB      = M_sq_inv @ Bp
             W[i]    = I - MB @ A[i]
             V[i]    = MB @ b[i]
+            Wc[i]   = -M_sq @ Bp @ A[i]
+            Vc[i]   = M_sq @ Bp @ b[i]
     # Case where Bp is computed on-line
     else:
+        M_sq        = M.power(1/2)
         M_sq_inv    = M.power(-1/2)
         B           = A @ M_sq_inv 
         Bp          = B.T @ np.linalg.inv((B @ B.T))
         MB          = M_sq_inv @ Bp
         W           = np.eye(M.shape[0]) - MB @ A
         V           = MB @ b
+        Wc          = -M_sq @ Bp @ A
+        Vc          = M_sq @ Bp @ b
         
-    return W, V
+    return W, V, Wc, Vc
 
 
 '''
@@ -146,6 +158,318 @@ def give_Fext(Fext_phys, phi):
 '''
 
 '''
+Description : gives a ramp-force vector
+
+Inputs :    t       : (Nt)  time vector      
+            ts      : ()    ramp's starting time
+            te      : ()    ramp's ending time
+            Fs      : ()    ramp's force at starting time
+            Fe      : ()    ramp's force at ending time
+
+Outputs :   F_ramp  : (Nt)  ramp-force vector
+'''
+def UK_ramp_force(t, ts, te, Fs, Fe):
+    Nt                  = t.shape
+    F_ramp              = np.zeros(Nt)
+    idx_ramp            = np.logical_and(t>ts, t<te)
+    F_ramp[idx_ramp]    = Fs + (Fe-Fs)*(t[idx_ramp] - ts)/(te - ts)
+    return F_ramp
+    
+
+'''
+Description : gives a modal external force matrix
+
+Inputs :    Nt      : ()        time array's length
+            Nx      : ()        position array's length
+            phi     : ()        subsystem's modeshape
+            F_idx   : ()        index in the position array where the force is 
+                                applied 
+            F_fun   : ()        force function
+            params  : ()        force function's parameters
+
+Outputs :   Fext    : (Nt,Nx)  modal external force vector
+'''
+def UK_apply_force(Nt, Nx, phi, F_idx=0, F_fun=None, params=()):
+    Fext = sp.sparse.csr_array((Nt,Nx))
+    if F_fun:
+        Fext[:, F_idx]  = F_fun(*params)
+    Fext            = give_Fext(Fext, phi)
+    return Fext
+
+
+'''
+Description :   gives the UK modal parameters m, c and k and modeshapes phi_s
+                for a damped elastic string 
+
+Inputs :    x       : []        position vector    
+            params  :           dictionnary containing the following 
+                                parameters :
+                Nn_s    : [-]       number of string modes taken into account            
+                T       : [N]       string's tension force 
+                L       : [m]       string's length
+                rho_l   : [kg/m3]   string's longitudinal density
+                B       : [Nm2]     string's bending stiffness
+                etaF    : []        string's internal friction
+                etaA    : []        string's air viscous damping
+                etaB    : []        string's bending damping
+
+Outputs :   m_s     : (Nn_s)        string's modal mass vector
+            k_s     : (Nn_s)        string's modal rigidity vector
+            c_s     : (Nn_s)        string's modal damping vector
+            phi_s   : (Nx, Nn_s)    string's modeshapes 
+'''
+def UK_elastic_string(x, params):
+    Nn_s    = params['Nn_s']
+    T       = params['T']
+    L       = params['L']
+    rho_l   = params['rho_l']
+    B       = params['B']
+    etaF    = params['etaF']
+    etaA    = params['etaA']
+    etaB    = params['etaB']
+    n       = np.arange(Nn_s) + 1
+    ct      = np.sqrt(T/rho_l)
+    
+    Nx = x.size
+    
+    p = (2*n-1)*np.pi/(2*L)
+    f_s = ct/(2*np.pi)*p*(1+B/(2*T)*p**2)    
+    w_s = 2*np.pi*f_s
+    
+    phi_s = np.zeros((Nx, Nn_s))
+    for i in range(n.size):
+        phi_s[:,i] = np.sin(p[i]*x)
+    
+    m_s = rho_l*L/2*np.ones(Nn_s)
+    
+    zeta_s = 1/2*(T*(etaF+etaA/w_s)+etaB*B*p**2)/(T+B*p**2) 
+    
+    k_s = m_s*(w_s)**2
+    
+    c_s = 2*m_s*w_s*zeta_s
+    
+    return m_s, k_s, c_s, phi_s
+
+
+'''
+Description :   gives the UK modal parameters m, c and k and modeshapes phi_s
+                for a modal board
+
+Inputs :    params  :           dictionnary containing the following 
+                                parameters :
+                f_b     : (Nn_b) boards' modal frequencies
+                zeta_b  : (Nn_b) boards' modal losses
+                m_b     : (Nn_b) boards' modal masses
+
+Outputs :   m_b     : (Nn_s)        board's modal mass vector
+            k_b     : (Nn_s)        board's modal rigidity vector
+            c_b     : (Nn_s)        board's modal damping vector
+            phi_b   : (Nx, Nn_s)    board's modeshapes 
+'''
+def UK_board_modal(params):
+    f_b     = params['f_b']
+    zeta_b  = params['zeta_b']
+    m_b     = params['m_b']
+    
+    Nn_b    = f_b.size 
+    w_b     = 2*np.pi*f_b
+    k_b     = m_b*(w_b)**2
+    c_b     = 2*m_b*w_b*zeta_b
+    phi_b   = np.ones((1,Nn_b))  # body modes normalized at the bridge location
+    
+    return m_b, k_b, c_b, phi_b
+
+
+'''
+Description :   gives the constraint dictionnary for a fixed constraint on the 
+                given system at a given position.
+
+Inputs :    idx_sys : index of the constrained system
+            idx_x   : index of the position 
+                        
+Outputs :   constraint : corresponding constraint dictionnary 
+'''
+def UK_constraint_fixed(idx_sys, idx_x):
+    constraint = {'type' : 'fixed',
+                  'idx_sys' : idx_sys,
+                  'idx_x' : idx_x} 
+    return constraint
+
+
+'''
+Description :   gives the constraint dictionnary for a contact constraint on 
+                the given systems at given positions.
+
+Inputs :    idx_sys : indices of the two constrained systems
+            idx_x   : indices of the two positions 
+                        
+Outputs :   constraint : corresponding constraint dictionnary 
+'''    
+def UK_constraint_contact(idx_sys, idx_x):
+    constraint = {'type' : 'contact',
+                  'idx_sys' : idx_sys,
+                  'idx_x' : idx_x} 
+    return constraint
+
+
+'''
+Description :   gives the initial dictionnary for a rest initial state on 
+                the given system.
+
+Inputs :    idx_sys : indices of the resting system
+                        
+Outputs :   constraint : corresponding initial dictionnary 
+'''    
+def UK_initial_rest(idx_sys):
+    initial = {'type' : 'rest',
+                  'idx_sys' : idx_sys} 
+    return initial
+
+
+'''
+Description :   gives the constraint matrix A and vector b for the given 
+                constraints.
+
+Inputs :    phi_tuple   : (Ns)  tuple containing all the modeshapes (Nx_i, 
+                                                                     Nn_i)
+            constraints :           tuple of dictionnaries containing the 
+                                    constraint parameters :
+                type : string containing the type of constraint
+                    if type=='fixed':
+                        idx_sys : int containing the system's index
+                        idx_x   : int containing the position index
+                    if type=='contact':
+                        idx_sys : tuple containing the two systems' indices
+                        idx_x   : tuple containing the two positions' indices
+                        
+Outputs :   A       : (Nm, Nn)      constraint matrix
+            b       : (Nm)          constraint vector
+            phi_c   : (Nm,Nn)       system's modeshapes at constraints
+'''
+def UK_give_A_b(phi_tuple, constraints=()):
+    Nn_tuple = (0,)
+    for phi in phi_tuple:
+        Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
+    Nn          = Nn_tuple[-1]
+    Nm          = len(constraints)
+    
+    if Nm==0:
+        A       = np.zeros((1,Nn))
+        b       = np.zeros((1))
+        phi_c   = np.zeros(Nn) 
+    else:
+        A       = np.zeros((Nm, Nn))
+        b       = np.zeros((Nm))
+        phi_c   = np.zeros((Nm,Nn))
+        for i,c in enumerate(constraints):
+            if c['type'] == 'contact':
+                idx_sys_1, idx_sys_2                            = c['idx_sys']
+                idx_x_1, idx_x_2                                = c['idx_x']
+                A[i,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]]  = \
+                    phi_tuple[idx_sys_1][idx_x_1]
+                A[i,Nn_tuple[idx_sys_2]:Nn_tuple[idx_sys_2+1]]  = \
+                    -phi_tuple[idx_sys_2][idx_x_2]
+                phi_c[i,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]] = \
+                    phi_tuple[idx_sys_1][idx_x_1]
+            elif c['type'] == 'fixed':
+                idx_sys                                     = c['idx_sys']
+                idx_x                                       = c['idx_x']
+                A[i,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = \
+                    phi_tuple[idx_sys][idx_x]
+                phi_c[i,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = \
+                    phi_tuple[idx_sys][idx_x]
+    return A, b, phi_c
+
+
+'''
+Description :   gives the initial state q0, qd0, qdd0 and the initial 
+                constraint force for the given initial conditions.
+
+Inputs :    phi_tuple   : (Ns)  tuple containing all the modeshapes (Nx_i, 
+                                                                     Nn_i)
+            initials    :       tuple of dictionnaries containing the 
+                                    initial conditions :
+                type : string containing the type of initial conditions
+                    if type=='rest':
+                        idx_sys : int containing the system's index
+                        
+Outputs :   q0      : (Nn) initial position vector
+            qd0     : (Nn) initial velocity vector
+            qdd0    : (Nn) initial acceleration vector
+            Fc0     : (Nn) initial constraint force vector
+'''
+def UK_give_initial_state(phi_tuple, initials=()):
+    Nn_tuple = (0,)
+    for phi in phi_tuple:
+        Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
+    Nn          = Nn_tuple[-1]
+    Ni          = len(initials)
+    
+    q0      = np.zeros(Nn)
+    qd0     = np.zeros(Nn)
+    qdd0    = np.zeros(Nn)
+    Fc0     = np.zeros(Nn)
+    
+    for i,init in enumerate(initials):
+        if init['type'] == 'rest':
+            idx_sys     = init['idx_sys']
+            zero_vect   = np.zeros(Nn_tuple[idx_sys+1] - Nn_tuple[idx_sys])
+            q0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]   = zero_vect
+            qd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
+            qdd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = zero_vect
+            Fc0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
+    
+    return q0, qd0, qdd0, Fc0
+
+'''
+Description :   gives the modal matrices M, K, C, modeshapes' matrix PHI and
+                modal external force matrix Fext 
+
+Inputs :    m_tuple     : (Ns)  tuple containing all the modal masses
+            k_tuple     : (Ns)  tuple containing all the modal rigidities
+            c_tuple     : (Ns)  tuple containing all the modal damplings
+            Fext_tuple  : (Ns)  tuple containing all the modal external forces
+            phi_tuple   : (Ns)  tuple containing all the modeshapes (Nx_i, 
+                                                                     Nn_i)
+                        
+Outputs :   M       : (Nn, Nn)      modal mass matrix
+            K       : (Nn, Nn)      modal rigidity matrix
+            C       : (Nn, Nn)      modal damping matrix
+            PHI     : (Nx, Nn)      modeshapes' matrix
+            Fext    : (Nt, Nn)      modal external force matrix
+'''
+def UK_give_overall_model(m_tuple, k_tuple, c_tuple, Fext_tuple, phi_tuple):
+    Nn_tuple = (0,)
+    Nx_tuple = (0,)
+    for phi in phi_tuple:
+        Nn_tuple += (Nn_tuple[-1] + phi.shape[1],)
+        Nx_tuple += (Nx_tuple[-1] + phi.shape[0],)
+    Nn = Nn_tuple[-1]
+    Nx = Nx_tuple[-1]
+    
+    m   = np.concatenate(m_tuple) 
+    k   = np.concatenate(k_tuple)
+    c   = np.concatenate(c_tuple)
+    
+    M   = sp.sparse.dia_array(np.diag(m))
+    K   = sp.sparse.dia_array(np.diag(k))
+    C   = sp.sparse.dia_array(np.diag(c))
+    
+    Nn = m.shape[0]
+    
+    Fext = sp.sparse.hstack(Fext_tuple)
+    Fext = sp.sparse.csr_array(Fext)
+    
+    PHI             = np.zeros((Nx + 1, Nn))
+    for (i,phi) in enumerate(phi_tuple):
+        PHI[Nx_tuple[i]:Nx_tuple[i+1], Nn_tuple[i]:Nn_tuple[i+1]] = phi
+    
+    return M, K, C, PHI, Fext
+                
+
+
+
+'''
 Description :   gives the UK modal model of a one-string guitare. This model 
                 is from J.ANTUNES and V.DEBUT, 2017.
 
@@ -161,7 +485,7 @@ Outputs : M           : (Nn,Nn)       modal mass matrix
           Vc          : (Nn)          modal V matrix (such that 
                                       Fc = Wc @ qudd + Vc)
           phi         : (Nx,Nn)       string's modeshapes  
-          phi_c       : (Nm,Nn)       system's modeshapes at constraints' 
+          phi_c       : (Nm,Nn)       system's modeshapes at constraints 
           Fext        : (Nt,Nn)       external modal force matrix
           q0          : (Nn)          intial modal response 
           qd0         : (Nn)          intial modal response's velocity
@@ -176,127 +500,87 @@ def ANTUNES_2017(coupled=True):
         print('Model used : ANTUNES_2017 uncoupled')
     h       = 1e-5
     t       = np.arange(0,10, h) 
-    tE      = 1e-2
     
     Nt = t.size
     
-    # String model
+    # STRING MODEL -----------------------------------------------------
     
-    L       = 0.65 
-    xE      = 0.9*L
-    xF      = 0.33*L
-    idxF    = 0
-    idxE    = 1
-    x       = np.array([xF, xE, L])
-    n       = np.arange(200)+1
-    T       = 73.9
-    rho_l   = 3.61e-3
-    ct      = np.sqrt(T/rho_l)
-    B       = 4e-5
-    etaF    = 7e-5
-    etaA    = 0.9
-    etaB    = 2.5e-2
+    L = 0.65
     
-    Nn_s    = n.size
-    Nx      = x.size
+    x   = np.array([0.33*L, 0.9*L, L])  
+    Nx  = x.size
     
-    p = (2*n-1)*np.pi/(2*L)
-    f_s = ct/(2*np.pi)*p*(1+B/(2*T)*p**2)    
-    w_s = 2*np.pi*f_s
+    params          = {}
+    params['Nn_s']  = 200
+    params['T']     = 73.9
+    params['L']     = L 
+    params['rho_l'] = 3.61e-3
+    params['B']     = 4e-5
+    params['etaF']  = 7e-5
+    params['etaA']  = 0.9
+    params['etaB']  = 2.5e-2
     
-    phi_s = np.zeros((Nx, Nn_s))
-    for i in range(n.size):
-        phi_s[:,i] = np.sin(p[i]*x)
+    m_s, k_s, c_s, phi_s = UK_elastic_string(x, params)
     
-    # Fext_phys_s             =  np.zeros((Nt, Nx))  # CHANGE TO SCIPY ARRAY !!!!!!!!!!!!!!!!!!!
-    Fext_phys_s             = sp.sparse.csr_array((Nt,Nx))
-    Fext_phys_s[t<tE,idxE]  =  5*t[t<tE]/t[t<tE][-1]
-    Fext_s                  = give_Fext(Fext_phys_s, phi_s) 
+    F_idx   = 1  
+    ts      = 0.
+    te      = 1e-2
+    Fs      = 0.
+    Fe      = 5.
+    params  = (t, ts, te, Fs, Fe)
     
+    Fext_s = UK_apply_force(Nt, Nx, phi_s, F_idx, UK_ramp_force, params)
     
-    m_s = rho_l*L/2*np.ones(Nn_s)
+    # BOARD MODEL -------------------------------------------------------
     
-    zeta_s = 1/2*(T*(etaF+etaA/w_s)+etaB*B*p**2)/(T+B*p**2) 
+    params = {}
     
-    k_s = m_s*(w_s)**2
+    params['f_b']     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 
+                                  314.7, 344.5, 399.0, 429.6, 482.9, 504.2, 
+                                  553.9, 580.3, 645.7, 723.5])
     
-    c_s = 2*m_s*w_s*zeta_s
+    params['zeta_b']  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 
+                                  0.9, 0.7, 0.7, 0.6, 1.4, 1.0, 1.3])
     
+    params['m_b']     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 
+                                  8.80, 0.9, 0.41, 0.38, 1.07, 2.33, 1.36, 
+                                  2.02, 0.45])
     
-    # Board model
+    m_b, k_b, c_b, phi_b = UK_board_modal(params)
     
-    Nn_b    = 16 
+    Fext_b  = UK_apply_force(Nt, 1, phi_b)
     
-    phi_b   = np.ones((1,Nn_b))  # body modes normalized at the bridge location
+    # OVERALL MODEL -----------------------------------------------------
     
-    f_b     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 314.7, 
-                        344.5, 399.0, 429.6, 482.9, 504.2, 553.9, 580.3, 
-                        645.7, 723.5]) 
-    w_b     = 2*np.pi*f_b
+    m_tuple     = (m_s, m_b) 
+    k_tuple     = (k_s, k_b)
+    c_tuple     = (c_s, c_b)
+    Fext_tuple  = (Fext_s, Fext_b)
+    phi_tuple   = (phi_s, phi_b)
     
-    zeta_b  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 0.9, 
-                        0.7, 0.7, 0.6, 1.4, 1.0, 1.3])
+    M, K, C, phi, Fext = UK_give_overall_model(m_tuple, k_tuple, c_tuple, 
+                                         Fext_tuple, phi_tuple)
     
-    m_b     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 8.80, 0.9, 
-                        0.41, 0.38, 1.07, 2.33, 1.36, 2.02, 0.45])
+    # CONSTRAINTS -------------------------------------------------------
     
-    k_b = m_b*(w_b)**2
-    
-    c_b = 2*m_b*w_b*zeta_b
-    
-    #Fext_b  = np.zeros((Nt,Nn_b)) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    Fext_b   = sp.sparse.csr_array((Nt,Nn_b))
-    
-    # Overall model
-    
-    m   = np.concatenate((m_s, m_b)) 
-    k   = np.concatenate((k_s, k_b))
-    c   = np.concatenate((c_s, c_b))
-    
-    M   = sp.sparse.dia_array(np.diag(m))
-    K   = sp.sparse.dia_array(np.diag(k))
-    C   = sp.sparse.dia_array(np.diag(c))
-    
-    Nn = m.shape[0]
-    
-    #Fext = np.concatenate((Fext_s,Fext_b), axis=-1)
-    Fext = sp.sparse.hstack([Fext_s, Fext_b])
-    Fext = sp.sparse.csr_array(Fext)
-    
-    phi             = np.zeros((Nx + 1, Nn))
-    phi[:Nx, :Nn_s] = phi_s
-    phi[Nx:, Nn_s:] = phi_b
-    
-    phi_c           = phi[[0,2]]
-    
-    # Constraints
-    
-    A = np.zeros((2,Nn))
-    A[0,:Nn_s] = phi_s[-1]
-    A[1,:Nn_s] = phi_s[idxF]
     if coupled:
-        A[0, Nn_s:] = -phi_b[0].T
+        constraints = (UK_constraint_fixed(0, 0), 
+                       UK_constraint_contact((0,1), (2,0)))
+    else:
+        constraints = (UK_constraint_fixed(0, 0), 
+                       UK_constraint_fixed(0, 2))
     
-    b = np.zeros((2)) 
+    A, b, phi_c = UK_give_A_b(phi_tuple, constraints)
+        
+    # W, V, Wc, Vc MATRICES ---------------------------------------------
     
-    # Bp matrix
+    W, V, Wc, Vc = UK_give_W_V(A, M, b)
     
-    M_sq        = M.power(1/2)
-    M_sq_inv    = M.power(-1/2)
-    B           = A @ M_sq_inv
-    Bp          = B.T @ np.linalg.inv((B @ B.T))
-    MB          = M_sq_inv @ Bp
-    W           = np.eye(Nn) - MB @ A
-    V           = MB @ b 
-    Wc          = -M_sq @ Bp @ A
-    Vc          = M_sq @ Bp @ b
+    # INITIAL CONDITIONS ------------------------------------------------
     
-    # Initial conditions
+    initial = (UK_initial_rest(0), UK_initial_rest(1))
     
-    q0      = np.zeros(Nn)
-    qd0     = np.zeros(Nn)
-    qdd0    = np.zeros(Nn) 
-    Fc0     = np.zeros(Nn)
+    q0, qd0, qdd0, Fc0 = UK_give_initial_state(phi_tuple, initial)
     
     return M, K, C, W, V, Wc, Vc, phi, phi_c, Fext, q0, qd0 ,qdd0, Fc0, h
     
