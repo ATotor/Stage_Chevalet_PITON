@@ -3,9 +3,6 @@
 import numpy as np
 import scipy as sp
 
-import src.utils as utils
-import src.data as data
-
 
 
 '''
@@ -144,8 +141,9 @@ def UK_give_W_V(A, M, b):
 
 
 '''
-Description :   gives UK's model external physical force matrix Fext_phys for 
-                a given modal force matrix Fext and modal deformation matrix.
+Description :   gives UK's model modal physical force matrix Fext for 
+                a given physical force matrix Fext_phys and modal deformation 
+                matrix.
 
 Inputs  : Fext_phys   : ([Nt],Nx)     external force vector 
           phi         : (Nx,Nn)       modal deformation matrix
@@ -153,6 +151,8 @@ Outputs : Fext        : ([Nt],Nn)     modal external force vector
 '''
 def give_Fext(Fext_phys, phi):
     return sp.sparse.csr_array(Fext_phys @ phi)
+
+
 
 '''
 -------------------------------------------------------------
@@ -193,11 +193,11 @@ Inputs :    Nt      : ()        time array's length
 Outputs :   Fext    : (Nt,Nx)  modal external force vector
 '''
 def UK_apply_force(Nt, Nx, phi, F_idx=0, F_fun=None, params=()):
-    Fext = sp.sparse.csr_array((Nt,Nx))
+    Fext_phys = sp.sparse.csr_array((Nt,Nx))
     if F_fun:
-        Fext[:, F_idx]  = F_fun(*params)
-    Fext            = give_Fext(Fext, phi)
-    return Fext
+        Fext_phys[:, F_idx]  = F_fun(*params)
+    Fext = give_Fext(Fext_phys, phi)
+    return Fext, Fext_phys
 
 
 '''
@@ -557,7 +557,8 @@ Outputs :   M       : (Nn, Nn)      modal mass matrix
             PHI     : (Nx, Nn)      modeshapes' matrix
             Fext    : (Nt, Nn)      modal external force matrix
 '''
-def UK_give_overall_model(m_tuple, k_tuple, c_tuple, Fext_tuple, phi_tuple):
+def UK_give_overall_model(m_tuple, k_tuple, c_tuple, Fext_tuple, 
+                          Fext_phys_tuple, phi_tuple):
     Nn_tuple = (0,)
     Nx_tuple = (0,)
     for phi in phi_tuple:
@@ -579,134 +580,15 @@ def UK_give_overall_model(m_tuple, k_tuple, c_tuple, Fext_tuple, phi_tuple):
     Fext = sp.sparse.hstack(Fext_tuple)
     Fext = sp.sparse.csr_array(Fext)
     
-    PHI             = np.zeros((Nx + 1, Nn))
+    Fext_phys = sp.sparse.hstack(Fext_phys_tuple)
+    Fext_phys = sp.sparse.csr_array(Fext_phys)
+    
+    PHI             = np.zeros((Nx, Nn))
     for (i,phi) in enumerate(phi_tuple):
         PHI[Nx_tuple[i]:Nx_tuple[i+1], Nn_tuple[i]:Nn_tuple[i+1]] = phi
     
-    return M, K, C, PHI, Fext
-                
+    return M, K, C, PHI, Fext, Fext_phys
 
-
-
-'''
-Description :   gives the UK modal model of a one-string guitare. This model 
-                is from J.ANTUNES and V.DEBUT, 2017.
-
-Outputs : M           : (Nn,Nn)       modal mass matrix
-          K           : (Nn,Nn)       modal rigidity matrix
-          C           : (Nn,Nn)       modal damping matrix
-          W           : (Nn,Nn)       modal W matrix (such that 
-                                      qdd = W @ qudd + V)
-          V           : (Nn)          modal V matrix (such that 
-                                      qdd = W @ qudd + V)
-          Wc          : (Nn,Nn)       modal Wc matrix (such that 
-                                      Fc = Wc @ qudd + Vc)
-          Vc          : (Nn)          modal V matrix (such that 
-                                      Fc = Wc @ qudd + Vc)
-          phi         : (Nx,Nn)       string's modeshapes  
-          phi_c       : (Nm,Nn)       system's modeshapes at constraints 
-          Fext        : (Nt,Nn)       external modal force matrix
-          q0          : (Nn)          intial modal response 
-          qd0         : (Nn)          intial modal response's velocity
-          qdd0        : (Nn)          intial modal response's acceleration
-          Fc          : (Nn)          initial constraint modal force matrix
-          h           : ()            simulation time step
-'''
-def ANTUNES_2017(coupled=True):
-    if coupled:
-        print('Model used : ANTUNES_2017 coupled')
-    else:
-        print('Model used : ANTUNES_2017 uncoupled')
-        
-    # TIME ARRAY -------------------------------------------------------
-    
-    h       = 1e-5
-    t       = np.arange(0,10, h) 
-    
-    Nt = t.size
-    
-    # STRING MODEL -----------------------------------------------------
-    
-    L = 0.65
-    
-    x   = np.array([0.33*L, 0.9*L, L])  
-    Nx  = x.size
-    
-    params          = {}
-    params['Nn_s']  = 200
-    params['T']     = 73.9
-    params['L']     = L 
-    params['rho_l'] = 3.61e-3
-    params['B']     = 4e-5
-    params['etaF']  = 7e-5
-    params['etaA']  = 0.9
-    params['etaB']  = 2.5e-2
-    
-    m_s, k_s, c_s, phi_s = UK_elastic_string(x, params)
-    
-    F_idx   = 1  
-    ts      = 0.
-    te      = 1e-2
-    Fs      = 0.
-    Fe      = 5.
-    params  = (t, ts, te, Fs, Fe)
-    
-    Fext_s = UK_apply_force(Nt, Nx, phi_s, F_idx, UK_ramp_force, params)
-    
-    # BOARD MODEL -------------------------------------------------------
-    
-    params = {}
-    
-    params['f_b']     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 
-                                  314.7, 344.5, 399.0, 429.6, 482.9, 504.2, 
-                                  553.9, 580.3, 645.7, 723.5])
-    
-    params['zeta_b']  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 
-                                  0.9, 0.7, 0.7, 0.6, 1.4, 1.0, 1.3])
-    
-    params['m_b']     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 
-                                  8.80, 0.9, 0.41, 0.38, 1.07, 2.33, 1.36, 
-                                  2.02, 0.45])
-    
-    m_b, k_b, c_b, phi_b = UK_board_modal(params)
-    
-    Fext_b  = UK_apply_force(Nt, 1, phi_b)
-    
-    # OVERALL MODEL -----------------------------------------------------
-    
-    m_tuple     = (m_s, m_b) 
-    k_tuple     = (k_s, k_b)
-    c_tuple     = (c_s, c_b)
-    Fext_tuple  = (Fext_s, Fext_b)
-    phi_tuple   = (phi_s, phi_b)
-    
-    M, K, C, phi, Fext = UK_give_overall_model(m_tuple, k_tuple, c_tuple, 
-                                         Fext_tuple, phi_tuple)
-    
-    # CONSTRAINTS -------------------------------------------------------
-    
-    if coupled:
-        constraints = (UK_constraint_fixed(0, 0), 
-                       UK_constraint_contact((0,1), (2,0)))
-    else:
-        constraints = (UK_constraint_fixed(0, 0), 
-                       UK_constraint_fixed(0, 2))
-    
-    A, b, phi_c = UK_give_A_b(phi_tuple, constraints)
-        
-    # W, V, Wc, Vc MATRICES ---------------------------------------------
-    
-    W, V, Wc, Vc = UK_give_W_V(A, M, b)
-    
-    # INITIAL CONDITIONS ------------------------------------------------
-    
-    initial = (UK_initial_rest(0), UK_initial_rest(1))
-    
-    q0, qd0, qdd0, Fc0 = UK_give_initial_state(phi_tuple, initial)
-    
-    # RETURN ------------------------------------------------------------
-    
-    return M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, q0, qd0 ,qdd0, Fc0, h
 
 
 
@@ -841,159 +723,6 @@ def ANTUNES_2017(coupled=True):
 
 
 
-def toy_2el_model():
-    print('Model used : toy_model')
-    
-    # TIME ARRAY -------------------------------------------------------
-    
-    h       = 1e-5
-    t       = np.arange(0,10, h) 
-    
-    Nt = t.size
-    
-    # STRING MODEL -----------------------------------------------------
-    
-    L_s = 0.65
-    
-    x_s   = np.array([0.9*L_s, L_s])  
-    Nx_s  = x_s.size
-    
-    params_s          = {}
-    params_s['Nn_s']  = 200
-    params_s['T']     = 73.9
-    params_s['L']     = L_s 
-    params_s['rho_l'] = 3.61e-3
-    params_s['B']     = 0.
-    params_s['etaF']  = 0.
-    params_s['etaA']  = 0.
-    params_s['etaB']  = 0.
-    
-    m_s, k_s, c_s, phi_s = UK_elastic_string(x_s, params_s)
-    
-    F_idx   = 0  
-    ts      = 0.
-    te      = 1e-2
-    Fs      = 0.
-    Fe      = 5.
-    params_s  = (t, ts, te, Fs, Fe)
-    
-    Fext_s = UK_apply_force(Nt, Nx_s, phi_s, F_idx, UK_ramp_force, params_s)
-    
-    # BOARD MODEL -------------------------------------------------------
-    
-    h_p     = 2e-3
-    a_p     = 0.5 
-    b_p     = 0.3
-    E_p     = 0.5e9
-    I_x_p   = utils.give_I_rectangle(b_p, h_p) 
-    I_y_p   = utils.give_I_rectangle(a_p, h_p)
-    
-    x_p_bridge  = 0.25*a_p
-    x_p         = np.array([0, x_p_bridge, a_p])
-    y_p         = [b_p/2]
-    y_p         = np.concatenate(([0],y_p, [b_p]))
-    
-    x_p, y_p    = utils.make_grid(x_p, y_p)
-    Nx_p        = x_p.size 
-    
-    params_p = {
-        'Nm_p'  : 12, 
-        'Nn_p'  : 12,
-        'h'     : h_p, 
-        'a'     : a_p,
-        'b'     : b_p,
-        'rho'   : 600,
-        'D'     : (E_p*I_x_p, E_p*I_y_p, E_p*I_x_p/2, E_p*I_y_p/2),
-        }
-    
-    m_p, k_p, c_p, phi_p = UK_board(x_p, y_p, params_p)
-    
-    Fext_p = UK_apply_force(Nt, Nx_p, phi_p)
-    
-    # OVERALL MODEL -----------------------------------------------------
-    
-    m_tuple     = (m_s, m_p) 
-    k_tuple     = (k_s, k_p)
-    c_tuple     = (c_s, c_p)
-    Fext_tuple  = (Fext_s, Fext_p)
-    phi_tuple   = (phi_s, phi_p)
-    
-    M, K, C, phi, Fext = UK_give_overall_model(m_tuple, k_tuple, c_tuple, 
-                                         Fext_tuple, phi_tuple)
-    
-    # CONSTRAINTS -------------------------------------------------------
-    
-    constraints = (UK_constraint_contact((0, 1), (1, 1)),)
-    
-    A, b, phi_c = UK_give_A_b(phi_tuple, constraints)
-    
-    # W, V, Wc, Vc MATRICES ---------------------------------------------
-    
-    W, V, Wc, Vc = UK_give_W_V(A, M, b)
-    
-    # INITIAL CONDITIONS ------------------------------------------------
-    
-    initial = (UK_initial_rest(0), UK_initial_rest(1))
-    
-    q0, qd0, qdd0, Fc0 = UK_give_initial_state(phi_tuple, initial)
-    
-    # RETURN ------------------------------------------------------------
-    
-    return M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, q0, qd0 ,qdd0, Fc0, h
+
     
 
-
-'''
--------------------------------------------------------------
-                   MAIN FUNCTION
--------------------------------------------------------------
-'''
-
-def main() -> None:
-    
-    import disp
-    
-    save = True
-
-    # Getting system's model and initial variables 
-    M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, q, qd ,qdd, Fc, h = \
-        toy_2el_model()
-        # ANTUNES_2017(True)
-    
-    Nt, Nn  = Fext.shape
-    Nc      = phi_c.shape[0]
-    Nx      = phi.shape[0]
-    
-    # Data arrays' initialization
-    x, xd, xdd, Fc_phys             = np.zeros((Nt, Nx)), np.zeros((Nt, Nx)), \
-                                        np.zeros((Nt, Nx)), np.zeros((Nt, Nc))
-    x[0], xd[0], xdd[0], Fc_phys[0] = give_phys(phi, phi_c, q, qd, qdd, Fc)
-    
-    # Main simulation loop
-    print('------- Simulation running -------')
-    for i in range(1,Nt):
-        if not (100*i/Nt)%5:
-            print(f'{100*i//Nt} %')
-        q, qd, qdd, Fc                  = UK_step(M, K, C, 
-                                                  Fext[[i]], W, 
-                                                  V, Wc, Vc, q, qd, qdd, h)
-        x[i], xd[i], xdd[i], Fc_phys[i] = give_phys(phi, phi_c, q, qd, qdd, Fc)
-    print('------- Simulation over -------')
-    
-    # Save results
-    
-    if save:
-        data.save_simulation(M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, x,\
-                             xd ,xdd, Fc, h, save_dir='../results')
-    
-    # Results display
-    disp.set_gui_qt()
-    disp.summary_plot(x, Fc_phys, h)
-    
-'''
--------------------------------------------------------------
--------------------------------------------------------------
-'''
-
-if __name__ == "__main__":
-     main()
