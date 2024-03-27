@@ -162,5 +162,5 @@ print('\n------- Simulation over -------')
 
 # SAVE SIMULATION -------------------------------------------------------------
 
-data.save_simulation(M, K, C, A, b, W, V, Wc, Vc, phi, phi_c,
+data.save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c,
                      Fext, Fext_phys, x, xd ,xdd, Fc, Fc_phys, h)

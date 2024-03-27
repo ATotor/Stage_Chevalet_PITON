@@ -17,7 +17,7 @@ import src.UK as UK
 
 h       = 1e-5
 #t       = np.arange(0,10, h)
-t       = np.arange(0,1e-1, h)
+t       = np.arange(0,1e-2, h)
 Nt = t.size
 
 # STRING MODEL ----------------------------------------------------------------
@@ -37,7 +37,7 @@ params_s['etaF']  = 0.
 params_s['etaA']  = 0.
 params_s['etaB']  = 0.
 
-m_s, k_s, c_s, phi_s = UK.UK_elastic_string(x_s, params_s)
+m_s, k_s, c_s, phi_s, info_s = UK.UK_elastic_string(x_s, params_s)
 
 F_idx   = 0  
 ts      = 0.
@@ -46,8 +46,8 @@ Fs      = 0.
 Fe      = 5.
 params_s  = (t, ts, te, Fs, Fe)
 
-Fext_s, Fext_phys_s = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
-                                     UK.UK_ramp_force, params_s)
+Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
+                                                 UK.UK_ramp_force, params_s)
 
 # BOARD MODEL -----------------------------------------------------------------
 
@@ -76,9 +76,9 @@ params_p = {
     'D'     : (E_p*I_x_p, E_p*I_y_p, E_p*I_x_p/2, E_p*I_y_p/2),
     }
 
-m_p, k_p, c_p, phi_p = UK.UK_board(x_p, y_p, params_p)
+m_p, k_p, c_p, phi_p, info_p = UK.UK_board(x_p, y_p, params_p)
 
-Fext_p, Fext_phys_p = UK.UK_apply_force(Nt, Nx_p, phi_p)
+Fext_p, Fext_phys_p, info_fp = UK.UK_apply_force(Nt, Nx_p, phi_p)
 
 # OVERALL MODEL ---------------------------------------------------------------
 
@@ -97,7 +97,7 @@ M, K, C, phi, Fext, Fext_phys = \
 
 constraints = (UK.UK_constraint_contact((0, 1), (1, 1)),)
 
-A, b, phi_c = UK.UK_give_A_b(phi_tuple, constraints)
+A, b, phi_c, info_c = UK.UK_give_A_b(phi_tuple, constraints)
 
 # W, V, Wc, Vc MATRICES -------------------------------------------------------
 
@@ -107,7 +107,9 @@ W, V, Wc, Vc = UK.UK_give_W_V(A, M, b)
 
 initial = (UK.UK_initial_rest(0), UK.UK_initial_rest(1))
 
-q, qd, qdd, Fc = UK.UK_give_initial_state(phi_tuple, initial)
+q, qd, qdd, Fc, info_i = UK.UK_give_initial_state(phi_tuple, initial)
+
+info = (info_s, info_p, info_fs, info_fp) + info_c + info_i
 
 # MAIN SIMULATION -------------------------------------------------------------
 
@@ -134,7 +136,7 @@ print('\n------- Simulation over -------')
 
 # SAVE SIMULATION -------------------------------------------------------------
 
-data.save_simulation(M, K, C, A, b, W, V, Wc, Vc, phi, phi_c,
+data.save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c,
                      Fext, Fext_phys, x, xd ,xdd, Fc, Fc_phys, h)
 
 

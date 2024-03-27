@@ -2,6 +2,7 @@
 
 import numpy as np
 import scipy as sp
+import src.utils as utils
 
 
 
@@ -159,7 +160,7 @@ def give_Fext(Fext_phys, phi):
                    UK-MODEL FUNCTIONS
 -------------------------------------------------------------
 '''
-
+    
 '''
 Description : gives a ramp-force vector
 
@@ -176,7 +177,11 @@ def UK_ramp_force(t, ts, te, Fs, Fe):
     F_ramp              = np.zeros(Nt)
     idx_ramp            = np.logical_and(t>ts, t<te)
     F_ramp[idx_ramp]    = Fs + (Fe-Fs)*(t[idx_ramp] - ts)/(te - ts)
-    return F_ramp
+    info_f = {
+        "info_type"     : "force",
+        "force_type"    : "ramp",
+        "params"        : (ts, te, Fs, Fe)}
+    return F_ramp, info_f
     
 
 '''
@@ -195,9 +200,13 @@ Outputs :   Fext    : (Nt,Nx)  modal external force vector
 def UK_apply_force(Nt, Nx, phi, F_idx=0, F_fun=None, params=()):
     Fext_phys = sp.sparse.csr_array((Nt,Nx))
     if F_fun:
-        Fext_phys[:, F_idx]  = F_fun(*params)
+        Fext_phys[:, F_idx], info_f  = F_fun(*params)
+    else:
+        info_f = {
+            "info_type" : "ramp",
+            "force_type" : "zero"}
     Fext = give_Fext(Fext_phys, phi)
-    return Fext, Fext_phys
+    return Fext, Fext_phys, info_f
 
 
 '''
@@ -251,7 +260,14 @@ def UK_elastic_string(x, params):
     
     c_s = 2*m_s*w_s*zeta_s
     
-    return m_s, k_s, c_s, phi_s
+    info_s = {
+        "info_type"   : "subsystem",
+        "subsystem"   : "elastic_string",
+        "params"      : params,
+        "x"           : x
+        }
+    
+    return m_s, k_s, c_s, phi_s, info_s
 
 
 '''
@@ -308,7 +324,14 @@ def UK_beam(x, params):
     
     c_b     = 2*m_b*w_b*zeta_b
     
-    return m_b, k_b, c_b, phi_b
+    info_b = {
+        "info_type"   : "subsystem",
+        "subsystem"   : "beam",
+        "params"      : params,
+        "x"           : x
+        }
+    
+    return m_b, k_b, c_b, phi_b, info_b
 
 
 '''
@@ -368,7 +391,15 @@ def UK_board(x, y, params):
     
     c_p     = 2*m_p*w_p*zeta_p
     
-    return m_p, k_p, c_p, phi_p
+    info_p = {
+        "info_type"   : "subsystem",
+        "subsystem"   : "board",
+        "params"      : params,
+        "x"           : x,
+        "y"           : y
+        }
+    
+    return m_p, k_p, c_p, phi_p, info_p
 
 
 '''
@@ -387,17 +418,23 @@ Outputs :   m_b     : (Nn_s)        board's modal mass vector
             phi_b   : (Nx, Nn_s)    board's modeshapes 
 '''
 def UK_board_modal(params):
-    f_b     = params['f_b']
-    zeta_b  = params['zeta_b']
-    m_b     = params['m_b']
+    f_p     = params['f_p']
+    zeta_p  = params['zeta_p']
+    m_p     = params['m_p']
     
-    Nn_b    = f_b.size 
-    w_b     = 2*np.pi*f_b
-    k_b     = m_b*(w_b)**2
-    c_b     = 2*m_b*w_b*zeta_b
-    phi_b   = np.ones((1,Nn_b))  # body modes normalized at the bridge location
+    Nn_p    = f_p.size 
+    w_p     = 2*np.pi*f_p
+    k_p     = m_p*(w_p)**2
+    c_p     = 2*m_p*w_p*zeta_p
+    phi_p   = np.ones((1,Nn_p))  # body modes normalized at the bridge location
     
-    return m_b, k_b, c_b, phi_b
+    info_p = {
+        "info_type"   : "subsystem",
+        "subsystem"   : "board_modal",
+        "params"      : params
+        }
+    
+    return m_p, k_p, c_p, phi_p, info_p
 
 
 '''
@@ -467,6 +504,7 @@ Outputs :   A       : (Nm, Nn)      constraint matrix
             phi_c   : (Nm,Nn)       system's modeshapes at constraints
 '''
 def UK_give_A_b(phi_tuple, constraints=()):
+    info_c = ()
     Nn_tuple = (0,)
     for phi in phi_tuple:
         Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
@@ -491,6 +529,8 @@ def UK_give_A_b(phi_tuple, constraints=()):
                     -phi_tuple[idx_sys_2][idx_x_2]
                 phi_c[i,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]] = \
                     phi_tuple[idx_sys_1][idx_x_1]
+                info_c += ({"info_type"     : "constraint",
+                            "constraint"    : c},)
             elif c['type'] == 'fixed':
                 idx_sys                                     = c['idx_sys']
                 idx_x                                       = c['idx_x']
@@ -498,7 +538,9 @@ def UK_give_A_b(phi_tuple, constraints=()):
                     phi_tuple[idx_sys][idx_x]
                 phi_c[i,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = \
                     phi_tuple[idx_sys][idx_x]
-    return A, b, phi_c
+                info_c += ({"info_type"     : "constraint",
+                            "constraint"    : c},)
+    return A, b, phi_c, info_c
 
 
 '''
@@ -519,6 +561,7 @@ Outputs :   q0      : (Nn) initial position vector
             Fc0     : (Nn) initial constraint force vector
 '''
 def UK_give_initial_state(phi_tuple, initials=()):
+    info_i = ()
     Nn_tuple = (0,)
     for phi in phi_tuple:
         Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
@@ -537,8 +580,11 @@ def UK_give_initial_state(phi_tuple, initials=()):
             qd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
             qdd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = zero_vect
             Fc0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
+            info_i = ({
+                "info_type" : "initial",
+                "initial" : init},)
     
-    return q0, qd0, qdd0, Fc0
+    return q0, qd0, qdd0, Fc0, info_i
 
 '''
 Description :   gives the modal matrices M, K, C, modeshapes' matrix PHI and
