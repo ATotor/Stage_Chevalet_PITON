@@ -469,6 +469,15 @@ def UK_constraint_contact(idx_sys, idx_x):
     return constraint
 
 
+
+def UK_constraint_surface_contact(idx_sys, idx_1, idx_2):
+    constraint = {'type' : 'surface_contact',
+                  'idx_sys' : idx_sys,
+                  'idx_1' : idx_1,
+                  'idx_2' : idx_2}
+    return constraint
+
+
 '''
 Description :   gives the initial dictionnary for a rest initial state on 
                 the given system.
@@ -504,7 +513,7 @@ Outputs :   A       : (Nm, Nn)      constraint matrix
             phi_c   : (Nm,Nn)       system's modeshapes at constraints
 '''
 def UK_give_A_b(phi_tuple, constraints=()):
-    info_c = ()
+    info_c = []
     Nn_tuple = (0,)
     for phi in phi_tuple:
         Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
@@ -516,30 +525,59 @@ def UK_give_A_b(phi_tuple, constraints=()):
         b       = np.zeros((1))
         phi_c   = np.zeros(Nn) 
     else:
-        A       = np.zeros((Nm, Nn))
-        b       = np.zeros((Nm))
-        phi_c   = np.zeros((Nm,Nn))
         for i,c in enumerate(constraints):
             if c['type'] == 'contact':
-                idx_sys_1, idx_sys_2                            = c['idx_sys']
-                idx_x_1, idx_x_2                                = c['idx_x']
-                A[i,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]]  = \
+                a_temp      = np.zeros((1,Nn))  
+                b_temp      = np.zeros(1)
+                phi_c_temp  = np.zeros((1,Nn))
+                idx_sys_1, idx_sys_2 = c['idx_sys']
+                idx_x_1, idx_x_2     = c['idx_x']
+                a_temp[0,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]]  = \
                     phi_tuple[idx_sys_1][idx_x_1]
-                A[i,Nn_tuple[idx_sys_2]:Nn_tuple[idx_sys_2+1]]  = \
+                a_temp[0,Nn_tuple[idx_sys_2]:Nn_tuple[idx_sys_2+1]]  = \
                     -phi_tuple[idx_sys_2][idx_x_2]
-                phi_c[i,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]] = \
+                b_temp      = np.zeros(1)
+                phi_c_temp[0,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]] = \
                     phi_tuple[idx_sys_1][idx_x_1]
-                info_c += ({"info_type"     : "constraint",
-                            "constraint"    : c},)
+                info_c += [{"info_type"     : "constraint",
+                            "constraint"    : c}]
             elif c['type'] == 'fixed':
+                a_temp      = np.zeros((1,Nn))  
+                b_temp      = np.zeros(1)
+                phi_c_temp  = np.zeros((1,Nn))
                 idx_sys                                     = c['idx_sys']
                 idx_x                                       = c['idx_x']
-                A[i,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = \
+                a_temp[0,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = \
                     phi_tuple[idx_sys][idx_x]
-                phi_c[i,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = \
+                b_temp      = np.zeros(1)
+                phi_c_temp[0,Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = \
                     phi_tuple[idx_sys][idx_x]
-                info_c += ({"info_type"     : "constraint",
-                            "constraint"    : c},)
+                info_c += [{"info_type"     : "constraint",
+                            "constraint"    : c}]
+            elif c['type'] == 'surface_contact':
+                a_temp      = np.zeros((len(c['idx_1']), Nn))  
+                b_temp      = np.zeros((len(c['idx_1'])))
+                phi_c_temp  = np.zeros((len(c['idx_1']), Nn))
+                idx_sys_1, idx_sys_2    = c['idx_sys']
+                idx_1                   = c['idx_1']
+                idx_2                   = c['idx_2']
+                for j in range(len(idx_1)):
+                    a_temp[j,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]]     = \
+                        phi_tuple[idx_sys_1][idx_1[j]]
+                    a_temp[j,Nn_tuple[idx_sys_2]:Nn_tuple[idx_sys_2+1]]     = \
+                        -phi_tuple[idx_sys_2][idx_2[j]]
+                    phi_c_temp[j,Nn_tuple[idx_sys_1]:Nn_tuple[idx_sys_1+1]] = \
+                        phi_tuple[idx_sys_1][idx_1[j]]
+                info_c += [{"info_type"     : "constraint",
+                            "constraint"    : c}]
+            if 'A' not in locals():
+                A       = a_temp
+                b       = b_temp
+                phi_c   = phi_c_temp
+            else:
+                A       = np.vstack((A, a_temp))
+                b       = np.concatenate((b, b_temp))  
+                phi_c   = np.vstack((phi_c, phi_c_temp))
     return A, b, phi_c, info_c
 
 
@@ -561,7 +599,7 @@ Outputs :   q0      : (Nn) initial position vector
             Fc0     : (Nn) initial constraint force vector
 '''
 def UK_give_initial_state(phi_tuple, initials=()):
-    info_i = ()
+    info_i = []
     Nn_tuple = (0,)
     for phi in phi_tuple:
         Nn_tuple += (Nn_tuple[-1] + phi.shape[-1],) 
@@ -580,9 +618,9 @@ def UK_give_initial_state(phi_tuple, initials=()):
             qd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
             qdd0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]] = zero_vect
             Fc0[Nn_tuple[idx_sys]:Nn_tuple[idx_sys+1]]  = zero_vect
-            info_i = ({
+            info_i += [{
                 "info_type" : "initial",
-                "initial" : init},)
+                "initial" : init}]
     
     return q0, qd0, qdd0, Fc0, info_i
 

@@ -71,7 +71,7 @@ params['etaF']  = 7e-5
 params['etaA']  = 0.9
 params['etaB']  = 2.5e-2
 
-m_s, k_s, c_s, phi_s = UK.UK_elastic_string(x, params)
+m_s, k_s, c_s, phi_s, info_s = UK.UK_elastic_string(x, params)
 
 F_idx   = 1  
 ts      = 0.
@@ -80,27 +80,27 @@ Fs      = 0.
 Fe      = 5.
 params  = (t, ts, te, Fs, Fe)
 
-Fext_s, Fext_phys_s = UK.UK_apply_force(Nt, Nx, phi_s, F_idx, UK.UK_ramp_force, 
+Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx, phi_s, F_idx, UK.UK_ramp_force, 
                                         params)
 
 # BOARD MODEL -----------------------------------------------------------------
 
 params = {}
 
-params['f_b']     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 
+params['f_p']     = np.array([78.3, 100.2, 187.3, 207.8, 250.9, 291.8, 
                               314.7, 344.5, 399.0, 429.6, 482.9, 504.2, 
                               553.9, 580.3, 645.7, 723.5])
 
-params['zeta_b']  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 
+params['zeta_p']  = np.array([2.2, 1.1, 1.6, 1.0, 0.7, 0.9, 1.1, 0.7, 1.4, 
                               0.9, 0.7, 0.7, 0.6, 1.4, 1.0, 1.3])
 
-params['m_b']     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 
+params['m_p']     = np.array([2.91, 0.45, 0.09, 0.25, 2.65, 9.88, 8.75, 
                               8.80, 0.9, 0.41, 0.38, 1.07, 2.33, 1.36, 
                               2.02, 0.45])
 
-m_b, k_b, c_b, phi_b = UK.UK_board_modal(params)
+m_b, k_b, c_b, phi_b, info_b = UK.UK_board_modal(params)
 
-Fext_b, Fext_phys_b  = UK.UK_apply_force(Nt, 1, phi_b)
+Fext_b, Fext_phys_b, info_fb  = UK.UK_apply_force(Nt, 1, phi_b)
 
 # OVERALL MODEL ---------------------------------------------------------------
 
@@ -124,7 +124,7 @@ else:
     constraints = (UK.UK_constraint_fixed(0, 0), 
                    UK.UK_constraint_fixed(0, 2))
 
-A, b, phi_c = UK.UK_give_A_b(phi_tuple, constraints)
+A, b, phi_c, info_c = UK.UK_give_A_b(phi_tuple, constraints)
     
 # W, V, Wc, Vc MATRICES -------------------------------------------------------
 
@@ -134,7 +134,9 @@ W, V, Wc, Vc = UK.UK_give_W_V(A, M, b)
 
 initial = (UK.UK_initial_rest(0), UK.UK_initial_rest(1))
 
-q, qd, qdd, Fc = UK.UK_give_initial_state(phi_tuple, initial)
+q, qd, qdd, Fc, info_i = UK.UK_give_initial_state(phi_tuple, initial)
+
+info = [info_s, info_b, info_fs, info_fb] + info_c + info_i
 
 
 Nt, Nn  = Fext.shape

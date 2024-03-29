@@ -10,7 +10,7 @@ import src.UK as UK
 import src.data as data
 import src.disp as disp
 
-n = 6
+n = 4
 
 M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
     Fc_phys, h = data.load_simulation(n)

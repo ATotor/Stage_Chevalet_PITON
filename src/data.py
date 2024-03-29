@@ -19,10 +19,6 @@ def save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext,
     while(isdir(save_dir_temp)):
         n += 1
         save_dir_temp = save_dir + '/simulation_' + str(n)
-        
-    info = info + ({
-        "info_type" : "file",
-        "n" : n},)
     
     save_dir = save_dir_temp
     os.mkdir(save_dir)
@@ -49,7 +45,7 @@ def save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext,
     save_sparse(Fext, save_dir, 'Fext')
     save_sparse(Fext_phys, save_dir, 'Fext_phys')
     
-    write_info_file(info, save_dir)
+    write_info_file(n, info, save_dir)
     
     print("Saved simulation data in : " + save_dir)
 
@@ -134,85 +130,141 @@ def load_array(n=1, load_dir='./results', load_name='arr'):
     arr = np.load(name)
     
     return arr
-        
 
+def pop_info(info):
+    info.pop('info_type')
+    
 def write_elastic_string(info):
-    return 'Elastc string\n\t\tAn elastic string description ...\n'
+    text = '''Elastc string
+\t\tElastic string vibrating in 1 transverse direction.
+'''
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
 def write_beam(info):
-    return 'Beam\n\t\tA beam description ...\n'
+    text = '''Beam
+\t\tElastic beam vibrating in 1 transverse direction.
+'''
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
 def write_board(info):
-    return 'Board\n\t\tA board description ...\n'
+    text = '''Board
+\t\tElastic orthotropic board vibrating in its transverse direction.
+'''
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
 def write_board_modal(info):
-    return 'Modal board\n\t\tA modal board description ...\n'
+    text = '''Modal board
+\t\tElastic modal board and bridge obtained by experimental measurements.
+'''
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
 def write_ramp(info):
-    return 'Ramp\n\t\tA ramp force description...\n'
+    text = 'Ramp\n\t\tA ramp force starting at t=params[0] (amplitude '+\
+    'F=params[2]), ending at t=params[1] (amplitude F=params[3]).\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
 def write_fixed(info):
-    return 'Fixed\n\t\tA fixed constraint description ...\n'
+    text = 'Fixed\n\t\tA fixed point cannot accelerate : xdd=0.\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text 
 
 
 def write_contact(info):
-    return 'Contact\n\t\tA contact constraint description ...\n'
+    text = 'Contact\n\t\tA contact constraint means that the two points from'+\
+    'the two subsystems have the same acceleration : xdd1=xdd2.\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
 def write_rest(info):
-    return 'Rest\n\t\tA rest initial condition description ...\n'
+    text = 'Rest\n\t\tA rest initial condition at a point means that '+\
+    'x=xd=xdd=0 at t=0.\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
 
 
-def write_info_file(info, write_dir):
-    n = info[-1]["n"] 
-    text = "----------- simulation_"+str(n)+" -----------\n\nDESCRIPTION\n"+\
-        "\nSUBSYSTEMS\n"
-    n = 1
-    for inf in info[:-1]:
+def write_info_file(n, info, write_dir):
+    text = f"""\
+----------- simulation_{n} -----------
+        
+DESCRIPTION
+    This file containts additionnal information about the simulation.\
+ All units are in S.I.
+
+SUBSYSTEMS
+\
+    """
+    n = 0
+    for inf in info.copy():
         if inf["info_type"]=="subsystem":
+            pop_info(inf)
             text = text + '\tS' + str(n)+"-"
-            if inf["subsystem"]=="elastic_string":
+            subsystem = inf.pop("subsystem")
+            if subsystem=="elastic_string":
                 text = text + write_elastic_string(inf)
-            elif inf["subsystem"]=="beam":
+            elif subsystem=="beam":
                 text = text + write_beam(inf)
-            elif inf["subsystem"]=="board":
+            elif subsystem=="board":
                 text = text + write_board(inf)
-            elif inf["subsystem"]=="board_modal":
-                text = text + write_board(inf)
+            elif subsystem=="board_modal":
+                text = text + write_board_modal(inf)
+            info.remove(inf)
             n += 1
     
     text = text + "\nEXTERNAL FORCES\n"
-    n = 1
-    for inf in info[:-1]:
+    n = 0
+    for inf in info.copy():
         if inf["info_type"]=="force":
+            pop_info(inf)
             text = text + '\tF' + str(n)+"-"
-            if inf["force_type"]=="ramp":
+            force_type = inf.pop('force_type')
+            if force_type=="ramp":
                 text = text + write_ramp(inf)
+            info.remove(inf)
             n += 1
             
     text = text + "\nCONSTRAINTS\n"
-    n = 1
-    for inf in info[:-1]:
+    n = 0
+    for inf in info.copy():
         if inf["info_type"]=="constraint":
+            pop_info(inf)
             text = text + '\tC' + str(n)+"-"
-            if inf["constraint"]["type"]=="fixed":
+            cons_type = inf["constraint"].pop('type')
+            if cons_type=="fixed":
                 text = text + write_fixed(inf)
-            elif inf["constraint"]["type"]=="contact":
+            elif cons_type=="contact":
                 text = text + write_contact(inf)
+            info.remove(inf)
             n += 1
             
     text = text + "\nINITIAL CONDITIONS\n"
-    n = 1
-    for inf in info[:-1]:
+    n = 0
+    for inf in info.copy():
         if inf["info_type"]=="initial":
+            pop_info(inf)
             text = text + '\tI' + str(n)+"-"
-            if inf["initial"]["type"]=="rest":
+            ini_type = inf['initial'].pop('type')
+            if ini_type=="rest":
                 text = text + write_rest(inf)
+            info.remove(inf)
             n += 1
     
     with open(write_dir+'/info.txt', 'w', encoding='utf-8') as f:

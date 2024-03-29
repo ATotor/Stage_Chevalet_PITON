@@ -16,8 +16,8 @@ import src.UK as UK
 # TIME ARRAY ------------------------------------------------------------------
 
 h       = 1e-5
-#t       = np.arange(0,10, h)
 t       = np.arange(0,0.1, h)
+#t       = np.arange(0,10, h)
 Nt = t.size
 
 # STRING MODEL ----------------------------------------------------------------
@@ -49,6 +49,28 @@ params_s  = (t, ts, te, Fs, Fe)
 Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
                                                  UK.UK_ramp_force, params_s)
 
+#     # BRIDGE MODEL -----------------------------------------------------
+    
+L_b     = 6e-2
+Nx_b    = 10
+x_b     = np.linspace(0, L_b, Nx_b)
+
+w_b = 6e-2
+h_b = 0.5e-2
+I_b = utils.give_I_rectangle(w_b, h_b)
+
+params_b          = {}
+params_b['Nn_b']  = 4 
+params_b['L']     = L_b 
+params_b['E']     = 3e9
+params_b['I']     = I_b
+params_b['S']     = w_b*h_b
+params_b['rho']   = 800
+
+m_b, k_b, c_b, phi_b, info_b = UK.UK_beam(x_b, params_b)
+
+Fext_b, Fext_phys_b, info_b = UK.UK_apply_force(Nt, Nx_b, phi_b)
+
 # BOARD MODEL -----------------------------------------------------------------
 
 h_p     = 2e-3
@@ -60,7 +82,7 @@ I_y_p   = utils.give_I_rectangle(a_p, h_p)
 
 x_p_bridge  = 0.25*a_p
 x_p         = np.array([0, x_p_bridge, a_p])
-y_p         = [b_p/2]
+y_p         = x_b + b_p/2 - L_b/2
 y_p         = np.concatenate(([0],y_p, [b_p]))
 
 x_p, y_p    = utils.make_grid(x_p, y_p)
@@ -82,12 +104,12 @@ Fext_p, Fext_phys_p, info_fp = UK.UK_apply_force(Nt, Nx_p, phi_p)
 
 # OVERALL MODEL ---------------------------------------------------------------
 
-m_tuple         = (m_s, m_p) 
-k_tuple         = (k_s, k_p)
-c_tuple         = (c_s, c_p)
-Fext_tuple      = (Fext_s, Fext_p)
-Fext_phys_tuple = (Fext_phys_s, Fext_phys_p)
-phi_tuple       = (phi_s, phi_p)
+m_tuple         = (m_s, m_b, m_p) 
+k_tuple         = (k_s, k_b, k_p)
+c_tuple         = (c_s, c_b, c_p)
+Fext_tuple      = (Fext_s, Fext_b, Fext_p)
+Fext_phys_tuple = (Fext_phys_s, Fext_phys_b, Fext_phys_p)
+phi_tuple       = (phi_s, phi_b, phi_p)
 
 M, K, C, phi, Fext, Fext_phys = \
     UK.UK_give_overall_model(m_tuple, k_tuple, c_tuple, Fext_tuple, 
@@ -95,7 +117,14 @@ M, K, C, phi, Fext, Fext_phys = \
 
 # CONSTRAINTS -----------------------------------------------------------------
 
-constraints = (UK.UK_constraint_contact((0, 1), (1, 1)),)
+idx_b_middle    = Nx_b//2 + Nx_b%2
+idx_p_bridge    = [idx for idx in range(1,Nx_b+1)]
+idx_b_bridge    = [idx for idx in range(Nx_b)]
+
+constraints = (UK.UK_constraint_fixed(0, 0), 
+                UK.UK_constraint_contact((0, 1), (1, idx_b_middle)),
+                UK.UK_constraint_surface_contact((1,2),idx_b_bridge,
+                                                  idx_p_bridge))
 
 A, b, phi_c, info_c = UK.UK_give_A_b(phi_tuple, constraints)
 
@@ -138,5 +167,6 @@ print('\n------- Simulation over -------')
 
 data.save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c,
                      Fext, Fext_phys, x, xd ,xdd, Fc, Fc_phys, h)
+
 
 

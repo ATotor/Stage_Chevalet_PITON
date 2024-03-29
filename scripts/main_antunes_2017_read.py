@@ -78,7 +78,7 @@ def summary_plot(x, Fc_phys, h):
     plt.show()
     
     
-n = 5
+n = 2
 
 M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
     Fc_phys, h = data.load_simulation(n)
