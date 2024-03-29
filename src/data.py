@@ -135,7 +135,7 @@ def pop_info(info):
     info.pop('info_type')
     
 def write_elastic_string(info):
-    text = '''Elastc string
+    text = '''Elastic string
 \t\tElastic string vibrating in 1 transverse direction.
 '''
     for a,b in info.items():
@@ -177,6 +177,12 @@ def write_ramp(info):
         text += f'\t\t{a} : {b}\n'
     return text
 
+def write_zero(info):
+    text = 'Zero\n\t\tNo force is applied\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
+
 
 def write_fixed(info):
     text = 'Fixed\n\t\tA fixed point cannot accelerate : xdd=0.\n'
@@ -188,6 +194,14 @@ def write_fixed(info):
 def write_contact(info):
     text = 'Contact\n\t\tA contact constraint means that the two points from'+\
     'the two subsystems have the same acceleration : xdd1=xdd2.\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
+
+def write_surface_contact(info):
+    text = 'Surface contact\n\t\tA surface contact constraint means that '+\
+        'two points from two subsystems have the same acceleration : '+\
+            'xdd1=xdd2.\n'
     for a,b in info.items():
         text += f'\t\t{a} : {b}\n'
     return text
@@ -238,6 +252,8 @@ SUBSYSTEMS
             force_type = inf.pop('force_type')
             if force_type=="ramp":
                 text = text + write_ramp(inf)
+            elif force_type=="zero":
+                text = text + write_zero(inf)
             info.remove(inf)
             n += 1
             
@@ -252,6 +268,8 @@ SUBSYSTEMS
                 text = text + write_fixed(inf)
             elif cons_type=="contact":
                 text = text + write_contact(inf)
+            elif cons_type=="surface_contact":
+                text = text + write_surface_contact(inf)
             info.remove(inf)
             n += 1
             

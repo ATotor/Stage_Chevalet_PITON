@@ -16,9 +16,9 @@ import src.UK as UK
 # TIME ARRAY ------------------------------------------------------------------
 
 h       = 1e-5
-t       = np.arange(0,0.1, h)
-#t       = np.arange(0,10, h)
-Nt = t.size
+#t       = np.arange(0,0.1, h)
+t       = np.arange(0,1, h)
+Nt      = t.size
 
 # STRING MODEL ----------------------------------------------------------------
 
@@ -49,7 +49,7 @@ params_s  = (t, ts, te, Fs, Fe)
 Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
                                                  UK.UK_ramp_force, params_s)
 
-#     # BRIDGE MODEL -----------------------------------------------------
+# BRIDGE MODEL ----------------------------------------------------------------
     
 L_b     = 6e-2
 Nx_b    = 10
@@ -60,7 +60,7 @@ h_b = 0.5e-2
 I_b = utils.give_I_rectangle(w_b, h_b)
 
 params_b          = {}
-params_b['Nn_b']  = 4 
+params_b['Nn_b']  = 2 
 params_b['L']     = L_b 
 params_b['E']     = 3e9
 params_b['I']     = I_b
@@ -69,7 +69,7 @@ params_b['rho']   = 800
 
 m_b, k_b, c_b, phi_b, info_b = UK.UK_beam(x_b, params_b)
 
-Fext_b, Fext_phys_b, info_b = UK.UK_apply_force(Nt, Nx_b, phi_b)
+Fext_b, Fext_phys_b, info_fb = UK.UK_apply_force(Nt, Nx_b, phi_b)
 
 # BOARD MODEL -----------------------------------------------------------------
 
@@ -118,11 +118,11 @@ M, K, C, phi, Fext, Fext_phys = \
 # CONSTRAINTS -----------------------------------------------------------------
 
 idx_b_middle    = Nx_b//2 + Nx_b%2
-idx_p_bridge    = [idx for idx in range(1,Nx_b+1)]
-idx_b_bridge    = [idx for idx in range(Nx_b)]
 
-constraints = (UK.UK_constraint_fixed(0, 0), 
-                UK.UK_constraint_contact((0, 1), (1, idx_b_middle)),
+idx_b_bridge    = [idx for idx in range(Nx_b)]
+idx_p_bridge    = [12 + idx for idx in range(1,Nx_b+1)]
+
+constraints = (UK.UK_constraint_contact((0, 1), (1, idx_b_middle)),
                 UK.UK_constraint_surface_contact((1,2),idx_b_bridge,
                                                   idx_p_bridge))
 
@@ -138,7 +138,7 @@ initial = (UK.UK_initial_rest(0), UK.UK_initial_rest(1))
 
 q, qd, qdd, Fc, info_i = UK.UK_give_initial_state(phi_tuple, initial)
 
-info = [info_s, info_p, info_fs, info_fp] + info_c + info_i
+info = [info_s, info_b, info_p, info_fs, info_fb, info_fp] + info_c + info_i
 
 # MAIN SIMULATION -------------------------------------------------------------
 
