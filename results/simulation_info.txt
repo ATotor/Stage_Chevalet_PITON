@@ -1,0 +1,37 @@
+------- simulation_1.npz -------
+
+Test simulation on a simple analytic string/board system, before moving to the more complex string/bridge/board system.
+
+SUBSYSTEMS
+
+String : undamped and unelastic string. Fixed-free modal basis.  
+
+Board : undamped elastic thin board. Simply supported modal basis.
+
+CONSTRAINTS
+
+String : fixed at its zero-position
+
+String-board : contact between the end of the string and the position (0.25*a,b/2) of the board. 
+
+Board : -
+
+EXTERNAL FORCE
+
+String : ramp force at position 0.9*L
+
+Board : -
+
+INITIAL CONDITIONS
+
+String : rest
+
+Board : rest
+
+------- simulation_2.npz -------
+------- simulation_3.npz -------
+------- simulation_4.npz -------
+------- simulation_5.npz -------
+------- simulation_6.npz -------
+------- simulation_7.npz -------
+------- simulation_8.npz -------

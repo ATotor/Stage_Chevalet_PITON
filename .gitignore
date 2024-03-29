@@ -317,3 +317,5 @@ docs/Report/img/
 docs/Chevalet
 docs/UK
 
+# Numpy ZIP files
+*.npz
