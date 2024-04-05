@@ -1,4 +1,4 @@
------------ simulation_21 -----------
+----------- simulation_1 -----------
         
 DESCRIPTION
     This file containts additionnal information about the simulation. All units are in S.I.

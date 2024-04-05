@@ -24,8 +24,11 @@ Nt = t.size
 
 L_s = 0.65
 
-x_s   = np.array([0.9*L_s, L_s])  
-Nx_s  = x_s.size
+Nx_s    = 100 
+x_s     = np.linspace(0, L_s, Nx_s)
+#x_s     = np.array([0, 0.9*L_s, L_s])
+idx_b_s = -1
+Nx_s    = x_s.size
 
 params_s          = {}
 params_s['Nn_s']  = 200
@@ -39,12 +42,12 @@ params_s['etaB']  = 0.
 
 m_s, k_s, c_s, phi_s, info_s = UK.UK_elastic_string(x_s, params_s)
 
-F_idx   = 0  
-ts      = 0.
-te      = 1e-2
-Fs      = 0.
-Fe      = 5.
-params_s  = (t, ts, te, Fs, Fe)
+F_idx       = np.argmin(np.abs(x_s - 0.9*L_s))
+ts          = 0.
+te          = 1e-2
+Fs          = 0.
+Fe          = 5.
+params_s    = (t, ts, te, Fs, Fe)
 
 Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
                                                  UK.UK_ramp_force, params_s)
@@ -95,7 +98,7 @@ M, K, C, phi, Fext, Fext_phys = \
 
 # CONSTRAINTS -----------------------------------------------------------------
 
-constraints = (UK.UK_constraint_contact((0, 1), (1, 1)),)
+constraints = (UK.UK_constraint_contact((0, 1), (idx_b_s, 1)),)
 
 A, b, phi_c, info_c = UK.UK_give_A_b(phi_tuple, constraints)
 

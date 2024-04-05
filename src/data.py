@@ -5,6 +5,7 @@ import scipy as sp
 
 import os
 from os.path import isdir 
+from scipy.io.wavfile import write
     
 
 def save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, 
@@ -289,3 +290,13 @@ SUBSYSTEMS
         f.write(text)
 
 
+def save_wav(n, save_dir='./results', idx = 0):
+    M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
+        Fc_phys, h = load_simulation(n, save_dir)
+    Fs = int(np.round(1/h)) 
+    audio_data = xd[:,idx]
+    full_name = save_dir + "/simulation_" + str(n) + "/xd_" + str(idx) + ".wav"
+    write(full_name, Fs, audio_data)
+    print("Saved as "+full_name)
+    
+    

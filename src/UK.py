@@ -35,9 +35,9 @@ Inputs :  M           : (Nn,Nn)       modal mass matrix
           qd_prev     : (Nn)          previous modal response's velocity
           qdd_prev    : (Nn)          previous modal response's acceleration
           h           : ()            simulation time step
-Outputs : q0          : (Nn)          current modal response 
-          qd0         : (Nn)          current modal response's velocity
-          qdd0        : (Nn)          current modal response's acceleration
+Outputs : q           : (Nn)          current modal response 
+          qd          : (Nn)          current modal response's velocity
+          qdd         : (Nn)          current modal response's acceleration
           Fc          : (Nt,Nn)       constraint modal force matrix
 '''
 def UK_step(M, K, C, Fext, W, V, Wc, Vc, q_prev, qd_prev, qdd_prev, h):
@@ -92,7 +92,11 @@ Inputs  : M                 : 2d numpy array
 Outputs : M^T(MM^T)^(-1)    : 2d numpy array  
 '''
 def give_MP_inv(M):
-    return M.T @ np.linalg.inv(M @ M.T)
+    if np.any(M != 0):
+        Mpi = M.T @ np.linalg.inv(M @ M.T)
+    else:
+        Mpi = M.T
+    return Mpi
 
 
 '''
@@ -119,28 +123,38 @@ def UK_give_W_V(A, M, b):
         M_sq        = M.power(1/2)
         M_sq_inv    = M.power(-1/2)
         W           = np.zeros((Na, Nn, Nn))
-        V           = np.zeros((Na, Nn, 1))
+        V           = np.zeros((Na, Nn))
         Wc          = np.zeros((Na, Nn, Nn))
-        Vc          = np.zeros((Na, Nn, 1))
+        Vc          = np.zeros((Na, Nn))
         for i in range(Na):
-            B       = A[i] @ M_sq_inv
-            Bp      = give_MP_inv(B)
-            MB      = M_sq_inv @ Bp
-            W[i]    = I - MB @ A[i]
-            V[i]    = MB @ b[i]
-            Wc[i]   = -M_sq @ Bp @ A[i]
-            Vc[i]   = M_sq @ Bp @ b[i]
+            if np.any(A[i] != 0):
+                B       = A[i] @ M_sq_inv
+                Bp      = give_MP_inv(B)
+                MB      = M_sq_inv @ Bp
+                W[i]    = I - MB @ A[i]
+                V[i]    = MB @ b[i]
+                Wc[i]   = -M_sq @ Bp @ A[i]
+                Vc[i]   = M_sq @ Bp @ b[i]
+            else:
+                W[i] = I
     # Case where Bp is computed on-line
     else:
-        M_sq        = M.power(1/2)
-        M_sq_inv    = M.power(-1/2)
-        B           = A @ M_sq_inv 
-        Bp          = B.T @ np.linalg.inv((B @ B.T))
-        MB          = M_sq_inv @ Bp
-        W           = np.eye(M.shape[0]) - MB @ A
-        V           = MB @ b
-        Wc          = -M_sq @ Bp @ A
-        Vc          = M_sq @ Bp @ b
+        if np.any(A != 0):
+            M_sq        = M.power(1/2)
+            M_sq_inv    = M.power(-1/2)
+            B           = A @ M_sq_inv 
+            Bp          = B.T @ np.linalg.inv((B @ B.T))
+            MB          = M_sq_inv @ Bp
+            W           = np.eye(M.shape[0]) - MB @ A
+            V           = MB @ b
+            Wc          = -M_sq @ Bp @ A
+            Vc          = M_sq @ Bp @ b
+        else:
+            Nm,Nn = A.shape
+            W   = np.eye(Nn)
+            V   = np.zeros((Nn))
+            Wc  = np.zeros((Nn, Nn))
+            Vc  = np.zeros((Nn))
         
     return W, V, Wc, Vc
 
@@ -205,6 +219,7 @@ def UK_apply_force(Nt, Nx, phi, F_idx=0, F_fun=None, params=()):
     Fext_phys = sp.sparse.csr_array((Nt,Nx))
     if F_fun:
         Fext_phys[:, F_idx], info_f  = F_fun(*params)
+        info_f['F_idx'] = F_idx
     else:
         info_f = {
             "info_type" : "force",
@@ -533,7 +548,7 @@ def UK_give_A_b(phi_tuple, constraints=()):
     if Nm==0:
         A       = np.zeros((1,Nn))
         b       = np.zeros((1))
-        phi_c   = np.zeros(Nn) 
+        phi_c   = np.zeros((1,Nn)) 
     else:
         for i,c in enumerate(constraints):
             if c['type'] == 'contact':

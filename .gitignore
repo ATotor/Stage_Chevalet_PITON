@@ -319,3 +319,9 @@ docs/UK
 
 # Numpy ZIP files
 *.npz
+
+# Audio WAV files
+*.wav
+
+# Information text files
+info.txt

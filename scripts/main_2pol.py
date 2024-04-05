@@ -17,7 +17,7 @@ import src.UK as UK
 
 h       = 1e-5
 #t       = np.arange(0,0.1, h)
-t       = np.arange(0,5, h)
+t       = np.arange(0,1, h)
 Nt      = t.size
 
 # STRING MODEL ----------------------------------------------------------------
@@ -37,17 +37,28 @@ params_s['etaF']  = 0.
 params_s['etaA']  = 0.
 params_s['etaB']  = 0.
 
-m_s, k_s, c_s, phi_s, info_s = UK.UK_elastic_string(x_s, params_s)
+m_s_v, k_s_v, c_s_v, phi_s_v, info_s_v = UK.UK_elastic_string(x_s, params_s)
+m_s_h, k_s_h, c_s_h, phi_s_h, info_s_h = UK.UK_elastic_string(x_s, params_s)
 
-F_idx   = 0  
+F_idx   = 0
 ts      = 0.
 te      = 1e-2
 Fs      = 0.
 Fe      = 5.
-params_s  = (t, ts, te, Fs, Fe)
+alpha   = np.pi/2   # alpha = 0 -> vertical force
+Fe_v    = Fe*np.cos(alpha)
+Fe_h    = Fe*np.sin(alpha)
+ 
+params_s_v  = (t, ts, te, Fs, Fe_v)
+params_s_h  = (t, ts, te, Fs, Fe_h)
 
-Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
-                                                 UK.UK_ramp_force, params_s)
+Fext_s_v, Fext_phys_s_v, info_fs_v = UK.UK_apply_force(Nt, Nx_s, phi_s_v, 
+                                                       F_idx, UK.UK_ramp_force, 
+                                                       params_s_v)
+Fext_s_h, Fext_phys_s_h, info_fs_h = UK.UK_apply_force(Nt, Nx_s, phi_s_h, 
+                                                       F_idx, UK.UK_ramp_force, 
+                                                       params_s_h)
+
 
 # BRIDGE MODEL ----------------------------------------------------------------
     
@@ -55,7 +66,7 @@ L_b     = 6e-2
 Nx_b    = 10
 x_b     = np.linspace(0, L_b, Nx_b)
 
-w_b = 1e-2
+w_b = 6e-2
 h_b = 0.5e-2
 I_b = utils.give_I_rectangle(w_b, h_b)
 
@@ -70,6 +81,10 @@ params_b['rho']   = 800
 m_b, k_b, c_b, phi_b, info_b = UK.UK_beam(x_b, params_b)
 
 Fext_b, Fext_phys_b, info_fb = UK.UK_apply_force(Nt, Nx_b, phi_b)
+
+# ADD THE STRING'S HORIZONTAL DIRECTION (LONGITUDINAL FOR THE BEAM)
+
+
 
 # BOARD MODEL -----------------------------------------------------------------
 
@@ -104,12 +119,12 @@ Fext_p, Fext_phys_p, info_fp = UK.UK_apply_force(Nt, Nx_p, phi_p)
 
 # OVERALL MODEL ---------------------------------------------------------------
 
-m_tuple         = (m_s, m_b, m_p) 
-k_tuple         = (k_s, k_b, k_p)
-c_tuple         = (c_s, c_b, c_p)
-Fext_tuple      = (Fext_s, Fext_b, Fext_p)
-Fext_phys_tuple = (Fext_phys_s, Fext_phys_b, Fext_phys_p)
-phi_tuple       = (phi_s, phi_b, phi_p)
+m_tuple         = (m_s_v,m_s_h, m_b, m_p) 
+k_tuple         = (k_s_v, k_s_h, k_b, k_p)
+c_tuple         = (c_s_v, c_s_h, c_b, c_p)
+Fext_tuple      = (Fext_s_v, Fext_s_h, Fext_b, Fext_p)
+Fext_phys_tuple = (Fext_phys_s_v, Fext_phys_s_h, Fext_phys_b, Fext_phys_p)
+phi_tuple       = (phi_s_v, phi_s_h, phi_b, phi_p)
 
 M, K, C, phi, Fext, Fext_phys = \
     UK.UK_give_overall_model(m_tuple, k_tuple, c_tuple, Fext_tuple, 
@@ -122,8 +137,9 @@ idx_b_middle    = Nx_b//2 + Nx_b%2
 idx_b_bridge    = [idx for idx in range(Nx_b)]
 idx_p_bridge    = [12 + idx for idx in range(1,Nx_b+1)]
 
-constraints = (UK.UK_constraint_contact((0, 1), (1, idx_b_middle)),
-                UK.UK_constraint_surface_contact((1,2),idx_b_bridge,
+constraints = (UK.UK_constraint_contact((0, 2), (1, idx_b_middle)),
+               UK.UK_constraint_contact((1, 2), (1, idx_b_middle)),
+                UK.UK_constraint_surface_contact((2,3),idx_b_bridge,
                                                   idx_p_bridge))
 
 A, b, phi_c, info_c = UK.UK_give_A_b(phi_tuple, constraints)
@@ -138,7 +154,7 @@ initial = (UK.UK_initial_rest(0), UK.UK_initial_rest(1))
 
 q, qd, qdd, Fc, info_i = UK.UK_give_initial_state(phi_tuple, initial)
 
-info = [info_s, info_b, info_p, info_fs, info_fb, info_fp] + info_c + info_i
+info = [info_s_v, info_s_h, info_b, info_p, info_fs_v, info_fs_h, info_fb, info_fp] + info_c + info_i
 
 # MAIN SIMULATION -------------------------------------------------------------
 
