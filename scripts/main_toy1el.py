@@ -15,9 +15,10 @@ import src.UK as UK
 
 # TIME ARRAY ------------------------------------------------------------------
 
-h       = 1e-5
+#h       = 1e-5
+h       = 5e-6
 #t       = np.arange(0,10, h)
-t       = np.arange(0,0.1, h)
+t       = np.arange(0,10, h)
 Nt = t.size
 
 # STRING MODEL ----------------------------------------------------------------
@@ -27,7 +28,7 @@ L_s = 0.65
 Nx_s    = 100 
 x_s     = np.linspace(0, L_s, Nx_s)
 #x_s     = np.array([0, 0.9*L_s, L_s])
-idx_b_s = -1
+idx_b_s = Nx_s - 1
 Nx_s    = x_s.size
 
 params_s          = {}
@@ -39,6 +40,10 @@ params_s['B']     = 0.
 params_s['etaF']  = 0.
 params_s['etaA']  = 0.
 params_s['etaB']  = 0.
+# params_s['B']     = 4e-5
+# params_s['etaF']  = 7e-5
+# params_s['etaA']  = 0.9
+# params_s['etaB']  = 2.5e-2
 
 m_s, k_s, c_s, phi_s, info_s = UK.UK_elastic_string(x_s, params_s)
 
@@ -67,7 +72,7 @@ M, K, C, phi, Fext, Fext_phys = \
 
 # CONSTRAINTS -----------------------------------------------------------------
 
-constraints = (UK.UK_constraint_fixed(0, -1),)
+constraints = (UK.UK_constraint_fixed(0, idx_b_s),)
 
 A, b, phi_c, info_c = UK.UK_give_A_b(phi_tuple, constraints)
 
@@ -103,6 +108,8 @@ for i in range(1,Nt):
     q, qd, qdd, Fc                  = UK.UK_step(M, K, C, 
                                               Fext[[i]], W, 
                                               V, Wc, Vc, q, qd, qdd, h)
+    q, qd                           = UK.violation_elim(q, qd, constraints, 
+                                                        phi_c, A)
     x[i], xd[i], xdd[i], Fc_phys[i] = UK.give_phys(phi, phi_c, q, qd, qdd, Fc)
 print('\n------- Simulation over -------')
 
@@ -110,6 +117,3 @@ print('\n------- Simulation over -------')
 
 data.save_simulation(info, M, K, C, A, b, W, V, Wc, Vc, phi, phi_c,
                      Fext, Fext_phys, x, xd ,xdd, Fc, Fc_phys, h)
-
-
-

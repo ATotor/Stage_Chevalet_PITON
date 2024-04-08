@@ -21,7 +21,7 @@ import src.disp as disp
 
 # MAIN PROGRAM ----------------------------------------------------------------
 
-n   = 1
-idx = 0
+n   = 5
+idx = 89
 
 data.save_wav(n, idx=idx)

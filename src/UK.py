@@ -58,6 +58,54 @@ def UK_step(M, K, C, Fext, W, V, Wc, Vc, q_prev, qd_prev, qdd_prev, h):
     
     return q, qd, qdd, Fc
 
+
+
+'''
+Description :   makes the violation elimination technique (Yoon et. al, 1994)
+                at a given time step.
+ 
+Inputs :  q             : (Nn)     current modal response at a given time 
+                                   step
+          qd            : (Nn)     current modal response's velocity at a 
+                                   given time step
+          constraints   : (Nm)     tuple of dictionnaries containing the 
+                                   constraint parameters
+          phi_tuple     : (Ns)     tuple containing all the modeshapes (Nx_i, 
+                                                                        Nn_i)
+          A             : (Nm, Nn) modal constraint matrix
+        
+Outputs : q             : (Nn)     corrected modal response 
+          qd            : (Nn)     corrected modal response's velocity
+'''
+def violation_elim(q, qd, constraints, phi_c, A):
+    Nm = A.shape[0]
+    
+    Amp  =  give_MP_right_inv(A) 
+    
+    viol_q = np.zeros(Nm)
+    i = 0
+    while i < len(constraints):
+        const = constraints[i]
+        if const['type'] == 'fixed':
+            viol_q[i] = phi_c[i] @ q
+            i += 1
+        elif const['type'] == 'contact':
+            viol_q[i] += phi_c[i] @ q
+            i += 1
+        elif const['type'] == 'surface_contact':
+            for j in range(len(const['idx_1'])):
+                viol_q[i+j] += phi_c[i+j] @ q 
+                i += 1
+                
+    q   -= Amp @ viol_q 
+    
+    viol_qd = np.zeros(Nm) 
+    
+    qd -= Amp @ viol_qd
+    
+    return q, qd
+        
+
 '''
 Description :   gives the physical state x, xd, xdd and constraint force 
                 Fc_phys for the given modal state q, qd, qdd and modal 
@@ -79,7 +127,7 @@ def give_phys(phi, phi_c, q, qd, qdd, Fc):
     x       = q @ phi.T
     xd      = qd @ phi.T
     xdd     = qdd @ phi.T
-    Fc_phys = Fc @ give_MP_inv(phi_c)
+    Fc_phys = Fc @ give_MP_right_inv(phi_c)
     
     return x, xd, xdd, Fc_phys
 
@@ -91,9 +139,23 @@ Description :   gives the Moore-Penrose right pseudoinverse of a given matrix
 Inputs  : M                 : 2d numpy array
 Outputs : M^T(MM^T)^(-1)    : 2d numpy array  
 '''
-def give_MP_inv(M):
+def give_MP_right_inv(M):
     if np.any(M != 0):
         Mpi = M.T @ np.linalg.inv(M @ M.T)
+    else:
+        Mpi = M.T
+    return Mpi
+
+'''
+Description :   gives the Moore-Penrose left pseudoinverse of a given matrix
+                M.
+
+Inputs  : M                 : 2d numpy array
+Outputs : (M^TM)^(-1)M^T    : 2d numpy array  
+'''
+def give_MP_left_inv(M):
+    if np.any(M != 0):
+        Mpi = np.linalg.inv(M.T @ M) @ M.T 
     else:
         Mpi = M.T
     return Mpi
@@ -129,7 +191,7 @@ def UK_give_W_V(A, M, b):
         for i in range(Na):
             if np.any(A[i] != 0):
                 B       = A[i] @ M_sq_inv
-                Bp      = give_MP_inv(B)
+                Bp      = give_MP_right_inv(B)
                 MB      = M_sq_inv @ Bp
                 W[i]    = I - MB @ A[i]
                 V[i]    = MB @ b[i]
@@ -482,8 +544,8 @@ def UK_constraint_fixed(idx_sys, idx_x):
 Description :   gives the constraint dictionnary for a contact constraint on 
                 the given systems at given positions.
 
-Inputs :    idx_sys : indices of the two constrained systems
-            idx_x   : indices of the two positions 
+Inputs :    idx_sys : tuple with the indices of the two constrained systems
+            idx_x   : tuple with indices of the two positions 
                         
 Outputs :   constraint : corresponding constraint dictionnary 
 '''    

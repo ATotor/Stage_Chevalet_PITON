@@ -27,7 +27,7 @@ L_s = 0.65
 Nx_s    = 100 
 x_s     = np.linspace(0, L_s, Nx_s)
 #x_s     = np.array([0, 0.9*L_s, L_s])
-idx_b_s = -1
+idx_b_s = Nx_s - 1
 Nx_s    = x_s.size
 
 params_s          = {}

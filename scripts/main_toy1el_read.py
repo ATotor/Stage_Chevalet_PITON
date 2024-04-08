@@ -11,6 +11,7 @@ constraint forces).
 import matplotlib.pyplot as plt
 import matplotlib.animation as mpla
 import numpy as np
+import scipy.signal as sig
 import os
 
 os.chdir(os.getcwd()+'/..')
@@ -22,7 +23,7 @@ import src.disp as disp
 # MAIN SCRIPT -----------------------------------------------------------------
 
 # Simulation folder's number
-n = 15
+n = 5
 
 # Get the simulation data
 M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
@@ -32,16 +33,44 @@ t = np.arange(0, h*x.shape[0], h)
 
 idx_Fext = 89
 
+corr    = sig.correlate(x[:,idx_Fext],x[int(0.018/h):int(0.018/h+1/(h*110.2)),idx_Fext], 
+                        'valid')
+tau     = sig.correlation_lags(len(x[:,idx_Fext]), 
+                               len(x[int(0.018/h):int(0.018/h+1/(h*110.2)), 
+                                     idx_Fext]), 'valid')
+
+X = np.fft.rfft(x[:,idx_Fext])
+f = np.fft.rfftfreq(x[:,idx_Fext].size, h)
+
 # Plot the relevant data
 disp.set_gui_qt()
 
 plt.figure()
+plt.title('String\'s displacement at the excitation')
 plt.plot(t, x[:,idx_Fext])
+plt.xlabel('$t$ [s]')
+plt.ylabel(r'$y_s$ [m]')
 plt.show()
 
 plt.figure()
+plt.title('String\'s displacement at the bridge')
+plt.plot(t, x[:,-1])
+plt.xlabel('$t$ [s]')
+plt.ylabel(r'$y_s$ [m]')
+plt.show()
+
+plt.figure()
+plt.title('Excitation')
 plt.plot(t,Fext_phys[:,idx_Fext].toarray())
 plt.show()
+
+plt.figure()
+plt.title('String\'s displacement\'s spectrum magnitude at the excitation')
+plt.plot(f, np.abs(X))
+plt.xlabel(r'$f$ [Hz]')
+plt.ylabel(r'$|X_s|$')
+plt.show()
+
 
 # %%
 
