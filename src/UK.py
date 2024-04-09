@@ -253,15 +253,49 @@ Inputs :    t       : (Nt)  time vector
 Outputs :   F_ramp  : (Nt)  ramp-force vector
 '''
 def UK_ramp_force(t, ts, te, Fs, Fe):
-    Nt                  = t.shape
-    F_ramp              = np.zeros(Nt)
-    idx_ramp            = np.logical_and(t>ts, t<te)
-    F_ramp[idx_ramp]    = Fs + (Fe-Fs)*(t[idx_ramp] - ts)/(te - ts)
+    Nt                      = t.size
+    h                       = t[1] - t[0]
+    factor                  = 100
+    h_cont                  = h/factor
+    t_cont                  = np.arange(0,te-ts,h_cont)
+    F_cont                  = Fs + (Fe-Fs)*t_cont/(te - ts)
+    F_spec                  = np.fft.rfft(F_cont)
+    f_spec                  = np.fft.rfftfreq(t_cont.size, h_cont)
+    F_spec[f_spec>1/(2*h)]  = 0
+    F_cont                  = np.fft.irfft(F_spec)
+    
+    F_ramp                  = np.zeros(Nt)
+    idx_ramp                = np.logical_and(t>=ts, t<te)
+    F_ramp[idx_ramp]        = F_cont[::factor]
+    
     info_f = {
         "info_type"     : "force",
         "force_type"    : "ramp",
         "params"        : (ts, te, Fs, Fe)}
     return F_ramp, info_f
+
+
+'''
+Description : gives a gaussian force vector
+
+Inputs :    t       : (Nt)  time vector      
+            mu      : ()    gauussian's maximum amplitude time
+            sig     : ()    gaussian's width
+            Fs      : ()    maximal force at mu
+
+Outputs :   F_gauss : (Nt)  gaussian force vector
+'''
+def UK_force_gaussian(t, mu, sig, F):
+    Nt                      = t.size
+    F_gauss                 = np.zeros(Nt)
+    idx_gauss               = np.logical_and(t>mu-5*sig, t<mu+5*sig)
+    F_gauss[idx_gauss]      = F*np.exp(-(t[idx_gauss]-mu)**2 / (2*sig**2))
+    info_f = {
+        "info_type"     : "force",
+        "force_type"    : "gaussian",
+        "params"        : (mu, sig, F)}
+    
+    return F_gauss, info_f
     
 
 '''

@@ -23,7 +23,7 @@ import src.disp as disp
 # MAIN SCRIPT -----------------------------------------------------------------
 
 # Simulation folder's number
-n = 5
+n = 8
 
 # Get the simulation data
 M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\

@@ -16,10 +16,10 @@ import src.UK as UK
 # TIME ARRAY ------------------------------------------------------------------
 
 #h       = 1e-5
-h       = 5e-6
+h       = 1e-5
 #t       = np.arange(0,10, h)
-t       = np.arange(0,10, h)
-Nt = t.size
+t       = np.arange(0,5, h)
+Nt      = t.size
 
 # STRING MODEL ----------------------------------------------------------------
 
@@ -36,26 +36,33 @@ params_s['Nn_s']  = 200
 params_s['T']     = 73.9
 params_s['L']     = L_s 
 params_s['rho_l'] = 3.61e-3
-params_s['B']     = 0.
-params_s['etaF']  = 0.
-params_s['etaA']  = 0.
-params_s['etaB']  = 0.
-# params_s['B']     = 4e-5
-# params_s['etaF']  = 7e-5
-# params_s['etaA']  = 0.9
-# params_s['etaB']  = 2.5e-2
+# params_s['B']     = 0.
+# params_s['etaF']  = 0.
+# params_s['etaA']  = 0.
+# params_s['etaB']  = 0.
+params_s['B']     = 4e-5
+params_s['etaF']  = 7e-5
+params_s['etaA']  = 0.9
+params_s['etaB']  = 2.5e-2
 
 m_s, k_s, c_s, phi_s, info_s = UK.UK_elastic_string(x_s, params_s)
 
 F_idx       = np.argmin(np.abs(x_s - 0.9*L_s))
-ts          = 0.
-te          = 1e-2
-Fs          = 0.
-Fe          = 5.
-params_s    = (t, ts, te, Fs, Fe)
 
+# ts          = 0.
+# te          = 1e-2
+# Fs          = 0.
+# Fe          = 5.
+# params_s    = (t, ts, te, Fs, Fe)
+# Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
+#                                                  UK.UK_ramp_force, params_s)
+
+mu  = 0.01
+sig = 0.0025
+F   = 5
+params_s = (t, mu, sig, F)
 Fext_s, Fext_phys_s, info_fs = UK.UK_apply_force(Nt, Nx_s, phi_s, F_idx, 
-                                                 UK.UK_ramp_force, params_s)
+                                                  UK.UK_force_gaussian, params_s)
 
 # OVERALL MODEL ---------------------------------------------------------------
 

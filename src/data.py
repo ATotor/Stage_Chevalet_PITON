@@ -178,6 +178,13 @@ def write_ramp(info):
         text += f'\t\t{a} : {b}\n'
     return text
 
+def write_gaussian(info):
+    text = 'Gaussian\n\t\tA gaussian force with peak at t=params[0]'+\
+        ' and width w=params[1] (peak F=params[2]).\n'
+    for a,b in info.items():
+        text += f'\t\t{a} : {b}\n'
+    return text
+
 def write_zero(info):
     text = 'Zero\n\t\tNo force is applied\n'
     for a,b in info.items():
@@ -253,6 +260,8 @@ SUBSYSTEMS
             force_type = inf.pop('force_type')
             if force_type=="ramp":
                 text = text + write_ramp(inf)
+            elif force_type=="gaussian":
+                text = text + write_gaussian(inf)
             elif force_type=="zero":
                 text = text + write_zero(inf)
             info.remove(inf)
