@@ -276,6 +276,58 @@ def UK_ramp_force(t, ts, te, Fs, Fe):
 
 
 '''
+Description : gives a smooth ramp-force vector
+
+Inputs :    t       : (Nt)  time vector      
+            ts      : ()    ramp's starting time
+            te      : ()    ramp's ending time
+            F       : ()    ramp's force at ending time
+            alpha   : ()    starting time roughness factor
+            beta    : ()    starting time roughness factor
+
+Outputs :   F_ramp  : (Nt)  ramp-force vector
+'''
+def UK_smooth_ramp_force(t, ts, te, F, alpha=10000, beta=10000):
+    Nt                      = t.size
+    
+    def optim_func(x,args):
+        beta    = args['beta']
+        Ts      = args['Ts']
+        Te      = args['Te']
+        
+        return 1 - beta*(x-Ts) + np.exp(-beta*(x-Te))
+
+    def optim_der(x, args):
+        beta    = args['beta']
+        Ts      = args['Ts']
+        Te      = args['Te']
+        
+        return -beta*(1+np.exp(-beta*(x-Te)))
+    
+    args = {
+            'beta'  : beta,
+            'Ts'    : ts,
+            'Te'    : te
+            }
+    t0, _ = utils.newton(optim_func, optim_der, ts, args)
+    
+    tse = te - ts
+    A = F*(1+np.exp(beta*(t0-te)))/np.log(1+np.exp(alpha*(t0-ts)))
+    
+    F_ramp                  = np.zeros(Nt)
+    idx_ramp                = np.logical_and(t>=(ts - 5*tse), t<(te + 5*tse))
+    F_ramp[idx_ramp]        = A*np.log(1+np.exp(alpha*(t[idx_ramp]-ts)))/\
+        (1+np.exp(beta*(t[idx_ramp]-te)))
+    
+    info_f = {
+        "info_type"     : "force",
+        "force_type"    : "smooth_ramp",
+        "params"        : (ts, te, F, alpha, beta)}
+    
+    return F_ramp, info_f
+
+
+'''
 Description : gives a gaussian force vector
 
 Inputs :    t       : (Nt)  time vector      

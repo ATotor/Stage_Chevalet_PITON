@@ -23,7 +23,7 @@ import src.disp as disp
 # MAIN SCRIPT -----------------------------------------------------------------
 
 # Simulation folder's number
-n = 8
+n = 18
 
 # Get the simulation data
 M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
@@ -43,7 +43,7 @@ X = np.fft.rfft(x[:,idx_Fext])
 f = np.fft.rfftfreq(x[:,idx_Fext].size, h)
 
 # Plot the relevant data
-disp.set_gui_qt()
+#disp.set_gui_qt()
 
 plt.figure()
 plt.title('String\'s displacement at the excitation')
@@ -93,7 +93,7 @@ if animate:
         plt.title(f'String : t = {t[n]:.3f} s')
         line.set_ydata(x[n,:Nxs])
         
-    speed   = 5
+    speed   = 20
     n       = np.arange(0, Nt, speed)
     anim    = mpla.FuncAnimation(plt.gcf(), animate, n, fargs = (xs, x), 
                                  interval = 1)
