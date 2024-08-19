@@ -6,7 +6,7 @@ DESCRIPTION
 SUBSYSTEMS
     	S0-Elastic string
 		Elastic string vibrating in 1 transverse direction.
-		params : {'Nn_s': 200, 'T': 73.9, 'L': 0.65, 'rho_l': 0.00361, 'B': 0.0, 'etaF': 0.0, 'etaA': 0.0, 'etaB': 0.0}
+		params : {'Nn_s': 200, 'T': 73.9, 'L': 0.65, 'rho_l': 0.00361, 'B': 4e-05, 'etaF': 7e-05, 'etaA': 0.9, 'etaB': 0.025}
 		x : [0.         0.00656566 0.01313131 0.01969697 0.02626263 0.03282828
  0.03939394 0.0459596  0.05252525 0.05909091 0.06565657 0.07222222
  0.07878788 0.08535354 0.09191919 0.09848485 0.10505051 0.11161616
@@ -26,11 +26,7 @@ SUBSYSTEMS
  0.63030303 0.63686869 0.64343434 0.65      ]
 
 EXTERNAL FORCES
-	F0-Ramp
-		A ramp force starting at t=params[0] (amplitude F=params[2]), ending at t=params[1] (amplitude F=params[3]).
-		params : (0.0, 0.01, 0.0, 5.0)
-		F_idx : 89
-
+	F0-
 CONSTRAINTS
 	C0-Fixed
 		A fixed point cannot accelerate : xdd=0.

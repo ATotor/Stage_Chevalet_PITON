@@ -23,7 +23,7 @@ import src.disp as disp
 # MAIN SCRIPT -----------------------------------------------------------------
 
 # Simulation folder's number
-n = 18
+n = 1
 
 # Get the simulation data
 M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
@@ -45,28 +45,55 @@ f = np.fft.rfftfreq(x[:,idx_Fext].size, h)
 # Plot the relevant data
 #disp.set_gui_qt()
 
-plt.figure()
-plt.title('String\'s displacement at the excitation')
-plt.plot(t, x[:,idx_Fext])
-plt.xlabel('$t$ [s]')
-plt.ylabel(r'$y_s$ [m]')
-plt.show()
+# plt.figure()
+# plt.title('String\'s displacement at the excitation')
+# plt.plot(t, x[:,idx_Fext])
+# plt.xlabel('$t$ [s]')
+# plt.ylabel(r'$y_s$ [m]')
+# plt.show()
 
-plt.figure()
-plt.title('String\'s displacement at the bridge')
-plt.plot(t, x[:,-1])
-plt.xlabel('$t$ [s]')
-plt.ylabel(r'$y_s$ [m]')
-plt.show()
+# plt.figure()
+# plt.title('String\'s displacement at the bridge')
+# plt.plot(t, x[:,-1])
+# plt.xlabel('$t$ [s]')
+# plt.ylabel(r'$y_s$ [m]')
+# plt.show()
 
-plt.figure()
-plt.title('Excitation')
-plt.plot(t,Fext_phys[:,idx_Fext].toarray())
-plt.show()
+# plt.figure()
+# plt.title('Excitation')
+# plt.plot(t,Fext_phys[:,idx_Fext].toarray())
+# plt.show()
 
 plt.figure()
 plt.title('String\'s displacement\'s spectrum magnitude at the excitation')
-plt.plot(f, np.abs(X))
+plt.plot(f, 20*np.log(np.abs(X)))
+plt.xlabel(r'$f$ [Hz]')
+plt.ylabel(r'$|X_s|$')
+plt.show()
+
+
+
+# Simulation folder's number
+n = 5
+
+# Get the simulation data
+M, K, C, A, b, W, V, Wc, Vc, phi, phi_c, Fext, Fext_phys, x, xd ,xdd, Fc,\
+    Fc_phys, h = data.load_simulation(n)
+
+t = np.arange(0, h*x.shape[0], h)
+
+idx_Fext = 89
+
+corr    = sig.correlate(x[:,idx_Fext],x[int(0.018/h):int(0.018/h+1/(h*110.2)),idx_Fext], 
+                        'valid')
+tau     = sig.correlation_lags(len(x[:,idx_Fext]), 
+                               len(x[int(0.018/h):int(0.018/h+1/(h*110.2)), 
+                                     idx_Fext]), 'valid')
+
+
+#plt.figure()
+plt.title('String\'s displacement\'s spectrum magnitude at the excitation')
+plt.plot(f, 20*np.log(np.abs(X)))
 plt.xlabel(r'$f$ [Hz]')
 plt.ylabel(r'$|X_s|$')
 plt.show()
@@ -74,27 +101,27 @@ plt.show()
 
 # %%
 
-animate = True
+# animate = True
 
-if animate:
-    Nt  = t.size
-    Nxs = 100 
-    L   = 0.65
-    xs  = np.linspace(0, L, Nxs)
+# if animate:
+#     Nt  = t.size
+#     Nxs = 100 
+#     L   = 0.65
+#     xs  = np.linspace(0, L, Nxs)
     
-    plt.figure()
-    line, = plt.plot(xs, x[0,:Nxs])
-    plt.ylim(-5e-3, 5e-3)
-    plt.xlabel('x [m]')
-    plt.ylabel('y [m]')
-    plt.title('t = 0 s')
+#     plt.figure()
+#     line, = plt.plot(xs, x[0,:Nxs])
+#     plt.ylim(-5e-3, 5e-3)
+#     plt.xlabel('x [m]')
+#     plt.ylabel('y [m]')
+#     plt.title('t = 0 s')
     
-    def animate(n, xs, x):
-        plt.title(f'String : t = {t[n]:.3f} s')
-        line.set_ydata(x[n,:Nxs])
+#     def animate(n, xs, x):
+#         plt.title(f'String : t = {t[n]:.3f} s')
+#         line.set_ydata(x[n,:Nxs])
         
-    speed   = 20
-    n       = np.arange(0, Nt, speed)
-    anim    = mpla.FuncAnimation(plt.gcf(), animate, n, fargs = (xs, x), 
-                                 interval = 1)
-    plt.show()
+#     speed   = 20
+#     n       = np.arange(0, Nt, speed)
+#     anim    = mpla.FuncAnimation(plt.gcf(), animate, n, fargs = (xs, x), 
+#                                  interval = 1)
+#     plt.show()

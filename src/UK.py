@@ -283,11 +283,11 @@ Inputs :    t       : (Nt)  time vector
             te      : ()    ramp's ending time
             F       : ()    ramp's force at ending time
             alpha   : ()    starting time roughness factor
-            beta    : ()    starting time roughness factor
+            beta    : ()    ending time roughness factor
 
 Outputs :   F_ramp  : (Nt)  ramp-force vector
 '''
-def UK_smooth_ramp_force(t, ts, te, F, alpha=10000, beta=10000):
+def UK_smooth_ramp_force(t, ts, te, F, alpha=2500, beta=2500):
     Nt                      = t.size
     
     def optim_func(x,args):
@@ -412,7 +412,7 @@ def UK_elastic_string(x, params):
     Nx = x.size
     
     p = (2*n-1)*np.pi/(2*L)
-    f_s = ct/(2*np.pi)*p*(1+B/(2*T)*p**2)    
+    f_s = ct/(2*np.pi)*p*(1+B/(2*T)*p**2)   
     w_s = 2*np.pi*f_s
     
     phi_s = np.zeros((Nx, Nn_s))
@@ -523,7 +523,14 @@ Inputs :    x       : (Nx)      position vector in the x direction
                 a       : [m]       board's length in the x direction
                 b       : [m]       board's length in the y direction
                 rho     : [kg/m3]   board's density
-                D       : [Nm2]     board's bending stiffness parameters
+                E_x     : [Pa]      board's stiffness in the x direction
+                E_y     : [Pa]      board's stiffness in the y direction
+                G       : [Pa]      board's shear stiffness 
+                nu_xy   : [-]       board's xy Poisson coefficient 
+                nu_yx   : [-]       board's yx Poisson coefficient 
+                eta     : [s]       board's visco/thermo-elastic damping 
+                                    parameter
+                R       : [Hz]      board's fluid damping parameter
 
 Outputs :   m_p     : (Nm_p + Nn_p)      board's modal mass vector
             k_p     : (Nm_p + Nn_p)      board's modal rigidity vector
@@ -537,32 +544,44 @@ def UK_board(x, y, params):
     a       = params['a']
     b       = params['b']
     rho     = params['rho']
-    D       = params['D']
+    E_x     = params['E_x']
+    E_y     = params['E_y']
+    G       = params['G']
+    nu_xy   = params['nu_xy']
+    nu_yx   = params['nu_yx']
+    eta     = params['eta']
+    R       = params['R']
     
-    D1 = D[0] 
-    D2 = D[1]
-    D3 = D[2]
-    D4 = D[3]
+    D1 = E_x*h**3/(12*(1-nu_xy*nu_yx))
+    D2 = E_y*nu_xy*h**3/(6*(1-nu_xy*nu_yx))
+    D3 = E_y*h**3/(12*(1-nu_xy*nu_yx))
+    D4 = G*h**3/3
     
     m   = np.arange(Nm_p) + 1
     n   = np.arange(Nn_p) + 1
     m,n = utils.make_grid(m,n)
     
-    f_p     = np.pi/2*np.sqrt(1/(rho*h))*np.sqrt(D1*m**4/a**4 + D3*n**4/b**4+\
+    w_p     = np.pi**2/np.sqrt(rho*h)*np.sqrt(D1*m**4/a**4 + D3*n**4/b**4+\
                                              (D2+D4)*m**2*n**2/(a**2*b**2))
-        
-    w_p     = 2*np.pi*f_p 
     
     phi_p   = np.sin(np.inner(x[:,np.newaxis],m[:,np.newaxis])*np.pi/a)*\
                 np.sin(np.inner(y[:,np.newaxis],n[:,np.newaxis])*np.pi/b)
     
     m_p     = rho*h*a*b/4*np.ones(m.size) 
     
-    zeta_p  = np.zeros(m.size)
+    zeta_p  = (eta*w_p**2 + R)/(2*w_p)
     
     k_p     = m_p*(w_p)**2
     
     c_p     = 2*m_p*w_p*zeta_p
+    
+    idx = np.argsort(w_p)
+    
+    w_p     = w_p[idx]
+    m_p     = m_p[idx]
+    k_p     = k_p[idx]
+    c_p     = c_p[idx]
+    phi_p   = phi_p[:,idx]
     
     info_p = {
         "info_type"   : "subsystem",

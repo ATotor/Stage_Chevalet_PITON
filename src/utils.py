@@ -18,4 +18,7 @@ def newton(g, gp, x0, args=None):
         diff = g(x0, args)
         step += 1
     return x0, diff
+
+def dist(x1, x2):
+    return np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2)
         
